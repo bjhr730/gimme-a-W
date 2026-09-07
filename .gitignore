@@ -1,0 +1,78 @@
+# ── Environment / secrets ─────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Node / Next.js (apps/web, packages/*) ─────────────────────────
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+build/
+.vercel/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Python (collectors/) ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.python-version
+*.egg-info/
+.eggs/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+htmlcov/
+.coverage
+.coverage.*
+
+# ── Playwright ────────────────────────────────────────────────────
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# ── Collected data & caches (raw pages, parquet, http cache) ─────
+data/
+!data/.gitkeep
+.cache/
+*.parquet
+*.feather
+*.sqlite
+*.db
+
+# ── Database ──────────────────────────────────────────────────────
+*.dump
+*.sql.gz
+drizzle/meta/_journal.json.bak
+
+# ── OS ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editors / IDEs ────────────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Misc ──────────────────────────────────────────────────────────
+*.log
+.tmp/
+tmp/

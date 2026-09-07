@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 1180" width="1520" height="1180" role="img" aria-label="Gimme a W">
+  <defs>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+  <g transform="translate(0 190)">
+    <!-- Back wing -->
+    <path d="M95 200 C 170 175, 260 178, 340 210 C 400 236, 450 290, 470 335 L 480 350 C 420 352, 350 330, 290 300 C 210 260, 150 232, 95 200 Z" fill="#1E6070"/>
+    <!-- Tail -->
+    <path d="M120 400 L 300 385 L 318 455 L 160 465 Z" fill="#1E6070"/>
+    <path d="M125 520 L 290 500 L 320 455 L 350 470 L 305 535 Z" fill="#1E6070"/>
+    <!-- Body -->
+    <ellipse cx="470" cy="440" rx="215" ry="145" transform="rotate(-18 470 440)" fill="#2F8698"/>
+    <!-- Front wing -->
+    <path d="M175 615 C 240 560, 330 505, 420 470 C 445 460, 460 455, 470 455 C 440 505, 380 555, 300 600 C 260 620, 215 630, 175 615 Z" fill="#2F8698"/>
+    <path d="M235 590 C 300 545, 360 505, 420 475" fill="none" stroke="#1E6070" stroke-width="7" stroke-linecap="round"/>
+    <!-- Belly -->
+    <ellipse cx="545" cy="470" rx="115" ry="78" transform="rotate(-24 545 470)" fill="#7FC9D0"/>
+    <path d="M290 590 C 340 570, 390 540, 440 500" fill="none" stroke="#7FC9D0" stroke-width="7" stroke-linecap="round"/>
+    <!-- Crest -->
+    <path d="M585 190 C 590 165, 615 150, 640 158 C 625 172, 612 188, 606 208 Z" fill="#1E6070"/>
+    <!-- Head -->
+    <circle cx="632" cy="268" r="108" fill="#2F8698"/>
+    <!-- Beak -->
+    <path d="M728 236 L 865 220 L 740 292 Z" fill="#E8A33A"/>
+    <path d="M732 305 L 842 328 L 738 340 Z" fill="#E8A33A"/>
+    <!-- Eye -->
+    <circle cx="660" cy="262" r="19" fill="#0E1A1E"/>
+    <circle cx="666" cy="255" r="6" fill="#FFFFFF"/>
+    <!-- Chirp arcs -->
+    <path d="M900 205 C 915 220, 918 245, 905 265" fill="none" stroke="#9AA6AE" stroke-width="7" stroke-linecap="round"/>
+    <path d="M930 190 C 955 212, 960 250, 940 280" fill="none" stroke="#B6C0C6" stroke-width="7" stroke-linecap="round"/>
+    <!-- Dollar signs -->
+    <g fill="#D9A23A" font-family="DejaVu Sans, Verdana, Arial, sans-serif" font-weight="700">
+      <text x="975" y="200" font-size="92">$</text>
+      <text x="1120" y="110" font-size="130">$</text>
+      <text x="1275" y="20" font-size="170">$</text>
+    </g>
+  </g>
+  <!-- Wordmark -->
+  <text x="320" y="1060" font-family="DejaVu Sans, Verdana, Arial, sans-serif" font-size="150" fill="#111111">Gimme a</text>
+  <text x="1060" y="1060" font-family="DejaVu Sans, Verdana, Arial, sans-serif" font-size="150" font-weight="700" fill="#3F9A5A" filter="url(#soft)">W</text>
+</svg>
