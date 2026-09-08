@@ -46,7 +46,7 @@ and statistics ecosystems live.
 | Database | **PostgreSQL** on [Neon](https://neon.tech) | Relational data with lots of joins (team × season × game × stat); free tier is enough for v1 |
 | Schema / migrations | **Drizzle ORM** (`packages/db`) is the single source of truth; Python writes through `psycopg` | One schema definition, typed queries on the web side, plain SQL upserts on the collector side |
 | Scheduling | **GitHub Actions cron** for v1; move to a small worker (Railway / Fly.io + APScheduler) if we need sub-hourly runs | Zero infrastructure, logs live next to the code |
-| HTTP cache | `hishel` on-disk cache + a `raw_page` table storing fetched HTML/JSON | Re-parse without re-fetching, stay under source rate limits, reproducible debugging |
+| HTTP cache | On-disk cache inside the fetcher + a `raw_page` table storing fetched HTML/JSON | Re-parse without re-fetching, stay under source rate limits, reproducible debugging |
 | Package managers | `pnpm` (workspace) and `uv` (Python) | Fast, lockfile-based, monorepo-friendly |
 | Tooling | ESLint + Prettier, `ruff` + `mypy`, `pytest`, `vitest` | Standard, fast, low-config |
 | Hosting | Vercel (web) · Neon (db) · GitHub Actions (collectors + model runs) | Everything on free tiers to start |
@@ -261,9 +261,9 @@ Never commit `.env`. Commit `.env.example` with empty values instead.
 
 | Phase | Deliverable |
 |---|---|
-| **0 — Scaffold** (now) | README, `.gitignore`, monorepo skeleton, tooling |
-| **1 — Data spine** | Drizzle schema + migrations · ESPN adapter for soccer/NFL/CFB · CLI · first cron workflow |
-| **2 — Web v1** | Mobile-first responsive layout · home with today's games per sport · team, player, standings and game pages · search · PWA manifest and icons from the logo |
+| **0 — Scaffold** (done) | README, `.gitignore`, logo, monorepo skeleton, tooling |
+| **1 — Data spine** (done) | Drizzle schema + migrations · ESPN adapter for soccer/NFL/CFB · CLI · CI and daily collect workflows |
+| **2 — Web v1** (next) | Mobile-first responsive layout · home with today's games per sport · team, player, standings and game pages · search · PWA manifest and icons from the logo |
 | **3 — Depth** | Sports-Reference, CFBD, nflverse, football-data.co.uk adapters · `team_form` and `rating` computation · advanced stats on pages |
 | **4 — Game predictions** | Match result (1X2), win probability, total goals, total points · back-test harness vs closing lines · `/models` page |
 | **5 — Team and player markets** | Shots on target, corners, anytime goalscorer, anytime TD, passing/rushing/receiving yards · explanation panel per prediction |

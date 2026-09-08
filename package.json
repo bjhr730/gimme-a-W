@@ -1,0 +1,17 @@
+{
+  "name": "gimme-a-w",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sports prediction app: soccer, NFL and college football",
+  "scripts": {
+    "db:generate": "pnpm --filter @gimme/db generate",
+    "db:migrate": "pnpm --filter @gimme/db migrate",
+    "db:check": "pnpm --filter @gimme/db check",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
