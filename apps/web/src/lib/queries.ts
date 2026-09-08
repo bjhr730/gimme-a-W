@@ -751,7 +751,11 @@ export async function gamePredictions(gameId: number): Promise<PredictionRow[]> 
     // not be mistaken for the latest game model
     .where(and(eq(prediction.gameId, gameId), eq(prediction.subjectType, "game")))
     .orderBy(desc(modelRun.id));
-  const latestRun = rows[0]?.runId;
+  // The panel is built around the win probabilities, so anchor on the newest run
+  // that actually produced them. A props run writes game-level rows too (whole-match
+  // corners), and taking the newest run outright let it hide the match model.
+  const headline = new Set(["match_result", "win_probability"]);
+  const latestRun = rows.find((r) => headline.has(r.market))?.runId ?? rows[0]?.runId;
   return rows.filter((r) => r.runId === latestRun);
 }
 
