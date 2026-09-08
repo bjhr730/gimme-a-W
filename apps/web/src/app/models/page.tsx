@@ -31,7 +31,15 @@ type Scorecard = {
 
 export default async function ModelsPage() {
   const [runs, scorecard] = await Promise.all([modelRuns(), latestScorecard()]);
-  const backtests = runs.filter((r) => (r.metrics as Metrics).seasons && r.modelName !== "scorecard");
+  const order = ["nfl", "college-football"];
+  const rank = (r: (typeof runs)[number]) => {
+    const slug = (r.metrics as Metrics).competition ?? r.notes ?? "";
+    const i = order.indexOf(slug);
+    return i === -1 ? `1-${slug}` : `0-${i}`;
+  };
+  const backtests = runs
+    .filter((r) => (r.metrics as Metrics).seasons && r.modelName !== "scorecard")
+    .sort((a, b) => rank(a).localeCompare(rank(b)));
   const live = runs.filter((r) => !(r.metrics as Metrics).seasons && r.modelName !== "scorecard");
   const card = (scorecard?.metrics ?? null) as Scorecard | null;
   return (
