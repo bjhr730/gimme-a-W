@@ -30,15 +30,16 @@ export function StandingsTable({
   highlightTeamId?: number;
 }) {
   const soccer = sportId === "soccer";
-  const th = "label px-2 py-1.5 text-right text-[11px] text-muted";
+  const thBase = "label px-2 py-1.5 text-[11px] text-muted";
+  const th = `${thBase} text-right`;
   const td = "tnum px-2 py-1.5 text-right";
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[420px] text-sm">
         <thead className="border-b border-line">
           <tr>
-            <th className={`${th} w-7 text-left`}>#</th>
-            <th className={`${th} text-left`}>Team</th>
+            <th className={`${thBase} w-7 text-left`}>#</th>
+            <th className={`${thBase} text-left`}>Team</th>
             {soccer ? (
               <>
                 <th className={th}>P</th>
