@@ -173,7 +173,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     from gimme_predict.writer import PredictionWriter
 
     horizon = datetime.now(UTC) + timedelta(days=args.days)
-    since = datetime.now(UTC) - timedelta(hours=6)
+    # Only games that have not kicked off. Predicting one already under way
+    # produced rows the scorecard cannot grade, since grading compares what was
+    # published in advance against the result, and a number produced at minute 70
+    # is not a prediction.
+    since = datetime.now(UTC)
     writer = None if args.dry_run else PredictionWriter(cfg.database_url)
     markets = {m.strip() for m in args.markets.split(",")}
     with psycopg.connect(cfg.database_url) as conn:

@@ -5,11 +5,11 @@ old ones, so four passes a day added roughly 70 MB and the table grew to be the
 largest in the database. Left alone it refills the 512 MB project inside a week
 and writes start failing.
 
-What is kept: for each game and each model, the rows from the newest run. That is
-exactly what the site reads and what the scorecard grades, since predictions are
-only ever written for games that have not kicked off, so the newest run for a
-finished game is also the last one published before it started. Everything older
-is unreachable by any query the app makes.
+What is kept: for each game and each model, the rows from the last run that
+started before kickoff. That is what the site shows and the only thing the
+scorecard can grade, since grading compares what was published in advance
+against the result. Keeping the newest run outright would have been wrong for a
+game in progress, whose newest run may have been made at minute 70.
 
 Deleting in batches keeps the transaction short, which matters on a database that
 has already hit its ceiling once.
@@ -23,20 +23,33 @@ import psycopg
 
 BATCH = 20_000
 
-# The newest run per game and model. Predictions are written only for upcoming
-# games, so this row is also the last one published before kickoff.
-SUPERSEDED = """
-    WITH keep AS (
-        SELECT p.game_id, mr.model_name, MAX(p.model_run_id) AS run_id
+# The last run per game and model that started before kickoff, falling back to
+# the newest run when nothing preceded kickoff, so a game is never left blank.
+KEEP = """
+    WITH ranked AS (
+        SELECT p.game_id, mr.model_name, p.model_run_id,
+               (mr.started_at < g.kickoff) AS before_kickoff
         FROM prediction p
         JOIN model_run mr ON mr.id = p.model_run_id
-        GROUP BY p.game_id, mr.model_name
+        JOIN game g ON g.id = p.game_id
+        GROUP BY p.game_id, mr.model_name, p.model_run_id, (mr.started_at < g.kickoff)
     )
+    SELECT game_id, model_name,
+           COALESCE(
+               MAX(model_run_id) FILTER (WHERE before_kickoff),
+               MAX(model_run_id)
+           ) AS run_id
+    FROM ranked
+    GROUP BY game_id, model_name
+"""
+
+SUPERSEDED = f"""
+    WITH keep AS ({KEEP})
     SELECT p.id
     FROM prediction p
     JOIN model_run mr ON mr.id = p.model_run_id
     JOIN keep k ON k.game_id = p.game_id AND k.model_name = mr.model_name
-    WHERE p.model_run_id < k.run_id
+    WHERE p.model_run_id <> k.run_id
     LIMIT %s
 """
 
@@ -44,18 +57,13 @@ SUPERSEDED = """
 def count_superseded(conn: psycopg.Connection[Any]) -> int:
     with conn.cursor() as cur:
         cur.execute(
-            """
-            WITH keep AS (
-                SELECT p.game_id, mr.model_name, MAX(p.model_run_id) AS run_id
-                FROM prediction p
-                JOIN model_run mr ON mr.id = p.model_run_id
-                GROUP BY p.game_id, mr.model_name
-            )
+            f"""
+            WITH keep AS ({KEEP})
             SELECT count(*)
             FROM prediction p
             JOIN model_run mr ON mr.id = p.model_run_id
             JOIN keep k ON k.game_id = p.game_id AND k.model_name = mr.model_name
-            WHERE p.model_run_id < k.run_id
+            WHERE p.model_run_id <> k.run_id
             """
         )
         row = cur.fetchone()
