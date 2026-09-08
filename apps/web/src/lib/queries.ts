@@ -496,7 +496,9 @@ export async function gamePredictions(gameId: number): Promise<PredictionRow[]> 
     })
     .from(prediction)
     .innerJoin(modelRun, eq(prediction.modelRunId, modelRun.id))
-    .where(eq(prediction.gameId, gameId))
+    // game-level markets only: the player-props runs share the game id but must
+    // not be mistaken for the latest game model
+    .where(and(eq(prediction.gameId, gameId), eq(prediction.subjectType, "game")))
     .orderBy(desc(modelRun.id));
   const latestRun = rows[0]?.runId;
   return rows.filter((r) => r.runId === latestRun);
