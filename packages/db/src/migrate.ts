@@ -1,8 +1,11 @@
-import "dotenv/config";
 import { fileURLToPath } from "node:url";
+import { config } from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+
+// Secrets live in the repo-root .env, three levels up from this file.
+config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
 
 const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 if (!url) {

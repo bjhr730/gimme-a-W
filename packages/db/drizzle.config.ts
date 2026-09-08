@@ -1,5 +1,9 @@
-import "dotenv/config";
+import { config } from "dotenv";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "drizzle-kit";
+
+// Secrets live in the repo-root .env, two levels up from this package.
+config({ path: fileURLToPath(new URL("../../.env", import.meta.url)) });
 
 // Migrations run against the direct (non-pooled) Neon URL. Generation works offline.
 export default defineConfig({
