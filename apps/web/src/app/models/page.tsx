@@ -59,6 +59,18 @@ export default async function ModelsPage() {
         blend the model with the market when a line exists.
       </p>
 
+      {card && card.games === 0 ? (
+        <section className="mb-6 rounded-md border border-dashed border-line-strong bg-surface px-4 py-3">
+          <h2 className="display text-xl font-extrabold">Live scorecard</h2>
+          <p className="mt-1 max-w-[70ch] text-sm text-ink-2">
+            Nothing graded yet. This scores what the site actually published before kickoff,
+            so it fills in only once games that were predicted in advance finish. The engine
+            started publishing today, which means the first entries arrive with this week&apos;s
+            results. The back-tests below already cover past seasons.
+          </p>
+        </section>
+      ) : null}
+
       {card && card.games > 0 ? (
         <section className="mb-6 rounded-md border-2 border-pitch/60 bg-surface">
           <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-3 py-2">
