@@ -61,6 +61,13 @@ export function SearchBox({ variant }: { variant: "header" | "page" }) {
     }
   }, []);
 
+  // the full page honours ?q= so links like /search?q=mahomes still work
+  useEffect(() => {
+    if (variant !== "page") return;
+    const initial = new URLSearchParams(window.location.search).get("q");
+    if (initial) setQ(initial);
+  }, [variant]);
+
   useEffect(() => {
     const id = setTimeout(() => void search(q), 160);
     return () => clearTimeout(id);
