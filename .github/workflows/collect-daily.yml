@@ -12,6 +12,9 @@ on:
       date:
         description: "Date YYYY-MM-DD or 'today'"
         default: "today"
+      days:
+        description: "Number of days starting at date"
+        default: "2"
 
 concurrency:
   group: collect-espn
@@ -20,7 +23,7 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: collectors
@@ -33,10 +36,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen --no-dev
-      - name: Collect scoreboard, teams and standings
+      - name: Collect scoreboard, teams, standings and game summaries
         run: |
           uv run gimme-collect run espn \
             --kind all \
             --league "${{ github.event.inputs.league || 'all' }}" \
-            --date "${{ github.event.inputs.date || 'today' }}" \
-            --days 2
+            --date "${{ github.event.inputs.date || 'yesterday' }}" \
+            --days "${{ github.event.inputs.days || '3' }}"
+      - name: Recompute team form and Elo ratings
+        if: always()
+        run: uv run gimme-collect derive --what form,elo

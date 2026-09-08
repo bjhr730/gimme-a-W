@@ -15,8 +15,12 @@ from gimme_collectors.models import (
     CollectResult,
     CompetitionRef,
     GameRecord,
+    PickRecord,
+    PlayerRef,
+    RosterRecord,
     SeasonRef,
     StandingRecord,
+    SummaryRecord,
     TeamRecord,
     TeamRef,
     VenueRef,
@@ -405,6 +409,187 @@ class Writer:
         )
         self.rows_written += 1
 
+    # ------------------------------------------------------------- players
+
+    def upsert_player(self, cur: Cursor, sport: str, p: PlayerRef) -> int:
+        player_id = self._lookup_external(cur, "player", p.external_id)
+        if player_id is None:
+            cur.execute(
+                """
+                INSERT INTO player (sport_id, full_name, short_name, position, birth_date,
+                                    nationality, height_cm, weight_kg, headshot_url)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+                """,
+                (
+                    sport,
+                    p.full_name,
+                    p.short_name,
+                    p.position,
+                    p.birth_date,
+                    p.nationality,
+                    p.height_cm,
+                    p.weight_kg,
+                    p.headshot_url,
+                ),
+            )
+            player_id = _id(cur)
+            self._bind_external(cur, "player", player_id, p.external_id)
+            self.rows_written += 1
+        else:
+            cur.execute(
+                """
+                UPDATE player SET full_name = %s, short_name = COALESCE(%s, short_name),
+                    position = COALESCE(%s, position), birth_date = COALESCE(%s, birth_date),
+                    nationality = COALESCE(%s, nationality), height_cm = COALESCE(%s, height_cm),
+                    weight_kg = COALESCE(%s, weight_kg),
+                    headshot_url = COALESCE(%s, headshot_url), updated_at = now()
+                WHERE id = %s
+                """,
+                (
+                    p.full_name,
+                    p.short_name,
+                    p.position,
+                    p.birth_date,
+                    p.nationality,
+                    p.height_cm,
+                    p.weight_kg,
+                    p.headshot_url,
+                    player_id,
+                ),
+            )
+        return player_id
+
+    def upsert_roster(
+        self,
+        cur: Cursor,
+        player_id: int,
+        team_id: int,
+        season_id: int,
+        jersey: str | None,
+        position: str | None,
+    ) -> None:
+        cur.execute(
+            """
+            INSERT INTO roster (player_id, team_id, season_id, jersey_number, position)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (player_id, team_id, season_id) DO UPDATE SET
+                jersey_number = COALESCE(EXCLUDED.jersey_number, roster.jersey_number),
+                position = COALESCE(EXCLUDED.position, roster.position)
+            """,
+            (player_id, team_id, season_id, jersey, position),
+        )
+
+    def latest_season(self, cur: Cursor, competition_id: int) -> int | None:
+        cur.execute(
+            "SELECT id FROM season WHERE competition_id = %s "
+            "ORDER BY year DESC, label DESC LIMIT 1",
+            (competition_id,),
+        )
+        row = cur.fetchone()
+        return int(row["id"]) if row else None
+
+    def upsert_roster_record(self, cur: Cursor, r: RosterRecord) -> None:
+        competition_id = self.upsert_competition(cur, r.competition)
+        season_id = (
+            self.upsert_season(cur, competition_id, r.season)
+            if r.season
+            else self.latest_season(cur, competition_id)
+        )
+        if season_id is None:
+            return
+        team_id = self.upsert_team(cur, r.competition.sport, r.team)
+        self.upsert_team_season(cur, team_id, season_id, None)
+        player_id = self.upsert_player(cur, r.competition.sport, r.player)
+        self.upsert_roster(cur, player_id, team_id, season_id, r.jersey, r.position)
+        self.rows_written += 1
+
+    def upsert_pick(
+        self, cur: Cursor, game_id: int, pick_team_id: int | None, p: PickRecord
+    ) -> None:
+        cur.execute(
+            """
+            INSERT INTO pick (source_id, game_id, pick_team_id, win_probability, spread, total,
+                              author, url, published_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (source_id, game_id, author) DO UPDATE SET
+                pick_team_id = EXCLUDED.pick_team_id, win_probability = EXCLUDED.win_probability,
+                spread = COALESCE(EXCLUDED.spread, pick.spread),
+                total = COALESCE(EXCLUDED.total, pick.total),
+                url = COALESCE(EXCLUDED.url, pick.url), published_at = EXCLUDED.published_at
+            """,
+            (
+                self.source_id,
+                game_id,
+                pick_team_id,
+                p.win_probability,
+                p.spread,
+                p.total,
+                p.author,
+                p.url,
+                p.published_at,
+            ),
+        )
+        self.rows_written += 1
+
+    def write_summary(self, cur: Cursor, s: SummaryRecord) -> bool:
+        """Attach box score, player stats, lineups and picks to an existing game."""
+        game_id = self._lookup_external(cur, "game", s.game_external_id)
+        if game_id is None:
+            return False
+        cur.execute("SELECT season_id FROM game WHERE id = %s", (game_id,))
+        row = cur.fetchone()
+        season_id = int(row["season_id"]) if row else None
+        sport = s.competition.sport
+        home_id = self.upsert_team(cur, sport, s.home)
+        away_id = self.upsert_team(cur, sport, s.away)
+
+        if s.status is not None:
+            cur.execute(
+                """
+                UPDATE game SET status = %s,
+                    home_score = COALESCE(%s, home_score), away_score = COALESCE(%s, away_score),
+                    updated_at = now()
+                WHERE id = %s
+                """,
+                (s.status, s.home_score, s.away_score, game_id),
+            )
+
+        for team_id, stats in ((home_id, s.home_stats), (away_id, s.away_stats)):
+            if stats:
+                cur.execute(
+                    """
+                    INSERT INTO team_game_stat (game_id, team_id, stats) VALUES (%s, %s, %s)
+                    ON CONFLICT (game_id, team_id) DO UPDATE
+                        SET stats = team_game_stat.stats || EXCLUDED.stats, updated_at = now()
+                    """,
+                    (game_id, team_id, Jsonb(stats)),
+                )
+                self.rows_written += 1
+
+        for ps in s.players:
+            team_id = self.upsert_team(cur, sport, ps.team)
+            player_id = self.upsert_player(cur, sport, ps.player)
+            cur.execute(
+                """
+                INSERT INTO player_game_stat (game_id, player_id, team_id, stats)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (game_id, player_id) DO UPDATE
+                    SET team_id = EXCLUDED.team_id,
+                        stats = player_game_stat.stats || EXCLUDED.stats, updated_at = now()
+                """,
+                (game_id, player_id, team_id, Jsonb(ps.stats)),
+            )
+            self.rows_written += 1
+            if season_id is not None:
+                self.upsert_roster(
+                    cur, player_id, team_id, season_id, ps.player.jersey, ps.player.position
+                )
+
+        for p in s.picks:
+            pick_team_id = self.upsert_team(cur, sport, p.pick_team) if p.pick_team else None
+            self.upsert_pick(cur, game_id, pick_team_id, p)
+        return True
+
     # --------------------------------------------------------------- batch
 
     def write(self, result: CollectResult) -> int:
@@ -418,6 +603,10 @@ class Writer:
                     self.upsert_game(cur, g)
                 for s in result.standings:
                     self.upsert_standing(cur, s)
+                for r in result.rosters:
+                    self.upsert_roster_record(cur, r)
+                for summary in result.summaries:
+                    self.write_summary(cur, summary)
             self.conn.commit()
         except Exception:
             self.conn.rollback()

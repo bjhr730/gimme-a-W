@@ -165,6 +165,7 @@ export const player = pgTable(
     nationality: text("nationality"),
     heightCm: integer("height_cm"),
     weightKg: integer("weight_kg"),
+    headshotUrl: text("headshot_url"),
     isActive: boolean("is_active").notNull().default(true),
     updatedAt: updatedAt(),
   },

@@ -91,19 +91,73 @@ export function signed(n: number | null | undefined): string {
 
 /** Human labels for the stat keys ESPN uses. */
 export const STAT_LABELS: Record<string, string> = {
+  // soccer
   possessionPct: "Possession %",
   totalShots: "Shots",
   shotsOnTarget: "Shots on target",
+  blockedShots: "Blocked shots",
   wonCorners: "Corners",
+  offsides: "Offsides",
   foulsCommitted: "Fouls",
+  yellowCards: "Yellow cards",
+  redCards: "Red cards",
+  saves: "Saves",
   shotAssists: "Key passes",
   goalAssists: "Assists",
   totalGoals: "Goals",
+  totalPasses: "Passes",
+  accuratePasses: "Accurate passes",
+  totalCrosses: "Crosses",
+  accurateCrosses: "Accurate crosses",
+  totalLongBalls: "Long balls",
+  accurateLongBalls: "Accurate long balls",
+  totalTackles: "Tackles",
+  effectiveTackles: "Tackles won",
+  interceptions: "Interceptions",
+  totalClearance: "Clearances",
+  effectiveClearance: "Effective clearances",
+  penaltyKickGoals: "Penalty goals",
+  penaltyKickShots: "Penalties taken",
+  // american football
+  firstDowns: "First downs",
+  thirdDownEff: "3rd down",
+  fourthDownEff: "4th down",
+  totalYards: "Total yards",
+  netPassingYards: "Passing yards",
+  completionAttempts: "Comp / Att",
+  yardsPerPass: "Yards per pass",
+  rushingYards: "Rushing yards",
+  rushingAttempts: "Rushes",
+  yardsPerRushAttempt: "Yards per rush",
+  totalPenaltiesYards: "Penalties / yards",
+  turnovers: "Turnovers",
+  fumblesLost: "Fumbles lost",
+  possessionTime: "Time of possession",
+  sacksYardsLost: "Sacks / yards",
+  redZoneAttempts: "Red zone",
+  totalDrives: "Drives",
+  // misc
   appearances: "Appearances",
   form: "Form",
   record: "Record",
   rank: "Rank",
 };
+
+/** Keys that are ratios of other rows or plumbing; not worth a row on the game page. */
+export const STAT_HIDDEN = new Set([
+  "form",
+  "record",
+  "rank",
+  "appearances",
+  "totalGoals",
+  "goalAssists",
+  "shotPct",
+  "passPct",
+  "crossPct",
+  "longballPct",
+  "tacklePct",
+  "categories",
+]);
 
 export const STAT_ORDER = [
   "possessionPct",
@@ -112,4 +166,9 @@ export const STAT_ORDER = [
   "wonCorners",
   "foulsCommitted",
   "shotAssists",
+  "totalYards",
+  "netPassingYards",
+  "rushingYards",
+  "firstDowns",
+  "turnovers",
 ];

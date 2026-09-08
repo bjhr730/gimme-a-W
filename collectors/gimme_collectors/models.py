@@ -42,6 +42,19 @@ class TeamRef(BaseModel):
     alt_color: str | None = None
 
 
+class PlayerRef(BaseModel):
+    external_id: str
+    full_name: str
+    short_name: str | None = None
+    position: str | None = None
+    jersey: str | None = None
+    birth_date: date | None = None
+    nationality: str | None = None
+    height_cm: int | None = None
+    weight_kg: int | None = None
+    headshot_url: str | None = None
+
+
 class VenueRef(BaseModel):
     external_id: str | None = None
     name: str
@@ -109,10 +122,60 @@ class StandingRecord(BaseModel):
     stats: dict[str, Any] = Field(default_factory=dict)
 
 
+class RosterRecord(BaseModel):
+    """A player on a team's roster. `season` may be None when the source does not
+    say; the writer then uses the competition's latest season."""
+
+    competition: CompetitionRef
+    team: TeamRef
+    player: PlayerRef
+    season: SeasonRef | None = None
+    jersey: str | None = None
+    position: str | None = None
+
+
+class PlayerGameStatRecord(BaseModel):
+    team: TeamRef
+    player: PlayerRef
+    stats: dict[str, Any] = Field(default_factory=dict)
+
+
+class PickRecord(BaseModel):
+    """A third-party prediction for one game (ESPN FPI, an SI expert, ...)."""
+
+    author: str
+    pick_team: TeamRef | None = None
+    win_probability: float | None = None  # for pick_team
+    spread: float | None = None
+    total: float | None = None
+    url: str | None = None
+    published_at: datetime | None = None
+
+
+class SummaryRecord(BaseModel):
+    """Everything a game-summary endpoint adds on top of the scoreboard row.
+    The game must already exist (matched by `game_external_id`)."""
+
+    game_external_id: str
+    competition: CompetitionRef
+    home: TeamRef
+    away: TeamRef
+    status: GameStatus | None = None
+    home_score: int | None = None
+    away_score: int | None = None
+    home_stats: dict[str, Any] = Field(default_factory=dict)
+    away_stats: dict[str, Any] = Field(default_factory=dict)
+    players: list[PlayerGameStatRecord] = Field(default_factory=list)
+    lineups: list[RosterRecord] = Field(default_factory=list)
+    picks: list[PickRecord] = Field(default_factory=list)
+
+
 class CollectResult(BaseModel):
     games: list[GameRecord] = Field(default_factory=list)
     teams: list[TeamRecord] = Field(default_factory=list)
     standings: list[StandingRecord] = Field(default_factory=list)
+    rosters: list[RosterRecord] = Field(default_factory=list)
+    summaries: list[SummaryRecord] = Field(default_factory=list)
     fetched_urls: list[str] = Field(default_factory=list)
 
     def counts(self) -> dict[str, int]:
@@ -120,5 +183,8 @@ class CollectResult(BaseModel):
             "games": len(self.games),
             "teams": len(self.teams),
             "standings": len(self.standings),
+            "rosters": len(self.rosters),
+            "summaries": len(self.summaries),
+            "player_stats": sum(len(s.players) for s in self.summaries),
             "requests": len(self.fetched_urls),
         }

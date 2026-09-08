@@ -1,6 +1,21 @@
 import { and, asc, desc, eq, gte, ilike, lt, lte, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { competition, game, odds, season, standing, team, teamGameStat, venue } from "@gimme/db";
+import {
+  competition,
+  game,
+  odds,
+  pick,
+  player,
+  playerGameStat,
+  rating,
+  roster,
+  season,
+  standing,
+  team,
+  teamForm,
+  teamGameStat,
+  venue,
+} from "@gimme/db";
 import { db } from "./db";
 
 const home = alias(team, "home");
@@ -283,6 +298,168 @@ export async function standingsForCompetition(slug: string) {
     seasonLabel: rows[0]?.seasonLabel ?? null,
     groups: [...groups.entries()].map(([name, entries]) => ({ name, entries })),
   };
+}
+
+// ------------------------------------------------------------ phase 3
+
+const playerCols = {
+  id: player.id,
+  fullName: player.fullName,
+  shortName: player.shortName,
+  position: player.position,
+  headshotUrl: player.headshotUrl,
+};
+
+/** Per-player box score rows for one game, with the team they played for. */
+export async function gamePlayers(gameId: number) {
+  return db()
+    .select({ teamId: playerGameStat.teamId, stats: playerGameStat.stats, player: playerCols })
+    .from(playerGameStat)
+    .innerJoin(player, eq(playerGameStat.playerId, player.id))
+    .where(eq(playerGameStat.gameId, gameId))
+    .orderBy(asc(player.fullName));
+}
+
+/** Third-party picks (ESPN FPI today) for one game. */
+export async function gamePicks(gameId: number) {
+  return db()
+    .select({
+      author: pick.author,
+      winProbability: pick.winProbability,
+      spread: pick.spread,
+      total: pick.total,
+      publishedAt: pick.publishedAt,
+      pickTeam: { id: team.id, name: team.name, shortName: team.shortName },
+    })
+    .from(pick)
+    .leftJoin(team, eq(pick.pickTeamId, team.id))
+    .where(eq(pick.gameId, gameId))
+    .orderBy(desc(pick.publishedAt));
+}
+
+/** Latest form, Elo and roster for a team. */
+export async function teamExtras(teamId: number) {
+  const [form, elo, rosterRows] = await Promise.all([
+    db()
+      .select({
+        form: teamForm.form,
+        ppg: teamForm.ppg,
+        marginPerGame: teamForm.marginPerGame,
+        restDays: teamForm.restDays,
+        stats: teamForm.stats,
+        asOf: sql<string>`${teamForm.asOf}::text`,
+        seasonLabel: season.label,
+        competitionName: competition.name,
+        competitionSlug: competition.slug,
+      })
+      .from(teamForm)
+      .innerJoin(season, eq(teamForm.seasonId, season.id))
+      .innerJoin(competition, eq(season.competitionId, competition.id))
+      .where(eq(teamForm.teamId, teamId))
+      .orderBy(desc(teamForm.asOf), desc(season.year))
+      .limit(3),
+    db()
+      .select({ value: rating.value, asOf: sql<string>`${rating.asOf}::text` })
+      .from(rating)
+      .where(
+        and(eq(rating.subjectType, "team"), eq(rating.subjectId, teamId), eq(rating.kind, "elo")),
+      )
+      .orderBy(desc(rating.asOf))
+      .limit(1),
+    db()
+      .select({
+        jersey: roster.jerseyNumber,
+        position: roster.position,
+        seasonId: roster.seasonId,
+        player: playerCols,
+      })
+      .from(roster)
+      .innerJoin(player, eq(roster.playerId, player.id))
+      .where(eq(roster.teamId, teamId))
+      .orderBy(desc(roster.seasonId), asc(roster.position), asc(player.fullName)),
+  ]);
+  // keep only the most recent season's roster, one row per competition for form
+  const latestSeason = rosterRows[0]?.seasonId;
+  const seen = new Set<string>();
+  return {
+    form: form.filter((f) => {
+      if (seen.has(f.competitionSlug)) return false;
+      seen.add(f.competitionSlug);
+      return true;
+    }),
+    elo: elo[0] ?? null,
+    roster: rosterRows.filter((r) => r.seasonId === latestSeason),
+  };
+}
+
+/** Elo rank of a team among its sport, 1 = best. */
+export async function eloRank(teamId: number, sportId: string) {
+  const rows = await db()
+    .select({ subjectId: rating.subjectId, value: rating.value })
+    .from(rating)
+    .innerJoin(team, eq(rating.subjectId, team.id))
+    .where(
+      and(
+        eq(rating.subjectType, "team"),
+        eq(rating.kind, "elo"),
+        eq(team.sportId, sportId),
+        eq(
+          rating.asOf,
+          sql`(select max(as_of) from rating r2 where r2.kind = 'elo' and r2.subject_type = 'team')`,
+        ),
+      ),
+    )
+    .orderBy(desc(rating.value));
+  const index = rows.findIndex((r) => r.subjectId === teamId);
+  return index === -1 ? null : { rank: index + 1, of: rows.length };
+}
+
+export async function playerById(id: number) {
+  const rows = await db().select().from(player).where(eq(player.id, id)).limit(1);
+  const p = rows[0];
+  if (!p) return null;
+  const [teams, log] = await Promise.all([
+    db()
+      .select({
+        team: { id: team.id, name: team.name, shortName: team.shortName, logoUrl: team.logoUrl },
+        jersey: roster.jerseyNumber,
+        position: roster.position,
+        seasonLabel: season.label,
+        seasonId: roster.seasonId,
+      })
+      .from(roster)
+      .innerJoin(team, eq(roster.teamId, team.id))
+      .innerJoin(season, eq(roster.seasonId, season.id))
+      .where(eq(roster.playerId, id))
+      .orderBy(desc(season.year))
+      .limit(3),
+    db()
+      .select({
+        ...gameCols,
+        teamId: playerGameStat.teamId,
+        stats: playerGameStat.stats,
+      })
+      .from(playerGameStat)
+      .innerJoin(game, eq(playerGameStat.gameId, game.id))
+      .innerJoin(competition, eq(game.competitionId, competition.id))
+      .innerJoin(home, eq(game.homeTeamId, home.id))
+      .innerJoin(away, eq(game.awayTeamId, away.id))
+      .where(eq(playerGameStat.playerId, id))
+      .orderBy(desc(game.kickoff))
+      .limit(25),
+  ]);
+  return { player: p, teams, log };
+}
+
+export async function searchPlayers(q: string) {
+  const text = q.trim();
+  if (text.length < 2) return [];
+  return db()
+    .select({ ...playerCols, sportId: player.sportId })
+    .from(player)
+    .where(ilike(player.fullName, `%${text}%`))
+    .orderBy(asc(player.fullName))
+    .limit(20);
 }
 
 export async function searchTeams(q: string) {

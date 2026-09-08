@@ -2,13 +2,14 @@
 
 gimme-collect leagues
 gimme-collect run espn --kind all --league nfl --league eng.1 --date today --days 2
+gimme-collect run espn --kind roster --league nfl
 gimme-collect run espn --kind scoreboard --league all --date 2026-09-06 --dry-run --json
+gimme-collect derive --what form,elo
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import traceback
 from datetime import UTC, date, datetime, timedelta
@@ -18,7 +19,9 @@ from gimme_collectors.models import CollectResult
 from gimme_collectors.pipeline.fetch import Fetcher
 from gimme_collectors.sources import espn
 
-KINDS = {"scoreboard", "teams", "standings"}
+KINDS = {"scoreboard", "teams", "standings", "summary", "roster"}
+DAILY_KINDS = {"scoreboard", "teams", "standings", "summary"}  # `all`; rosters are weekly
+DERIVATIONS = {"form", "elo"}
 
 
 def _parse_date(text: str) -> date:
@@ -44,7 +47,10 @@ def _build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="run a collector")
     run.add_argument("source", choices=["espn"], help="source adapter")
     run.add_argument(
-        "--kind", default="all", help="all | scoreboard | teams | standings (comma separated)"
+        "--kind",
+        default="all",
+        help="all | scoreboard | teams | standings | summary | roster (comma separated). "
+        "'all' is everything except roster.",
     )
     run.add_argument(
         "--league",
@@ -61,12 +67,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--json", action="store_true", help="print parsed records as JSON")
     run.add_argument("--no-cache", action="store_true", help="bypass the on-disk HTTP cache")
+
+    derive = sub.add_parser("derive", help="recompute derived tables from collected games")
+    derive.add_argument("--what", default="form,elo", help="form | elo (comma separated)")
     return parser
 
 
 def _kinds(text: str) -> set[str]:
     if text == "all":
-        return set(KINDS)
+        return set(DAILY_KINDS)
     kinds = {k.strip() for k in text.split(",") if k.strip()}
     unknown = kinds - KINDS
     if unknown:
@@ -75,7 +84,7 @@ def _kinds(text: str) -> set[str]:
 
 
 def _summary(slug: str, result: CollectResult) -> str:
-    counts = result.counts()
+    counts = {k: v for k, v in result.counts().items() if v}
     parts = ", ".join(f"{k}={v}" for k, v in counts.items())
     return f"[{slug}] {parts}"
 
@@ -101,7 +110,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     if not args.dry_run:
         if not cfg.database_url:
             print(
-                "DATABASE_URL is not set. Use --dry-run to run without a database.", file=sys.stderr
+                "DATABASE_URL is not set. Use --dry-run to run without a database.",
+                file=sys.stderr,
             )
             return 2
         from gimme_collectors.pipeline.db import Writer
@@ -159,17 +169,32 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_derive(args: argparse.Namespace) -> int:
+    cfg = settings()
+    if not cfg.database_url:
+        print("DATABASE_URL is not set.", file=sys.stderr)
+        return 2
+    what = {w.strip() for w in args.what.split(",") if w.strip()}
+    unknown = what - DERIVATIONS
+    if unknown:
+        raise SystemExit(f"Unknown derivation(s): {', '.join(sorted(unknown))}.")
+    from gimme_collectors import derive
+
+    counts = derive.run(cfg.database_url, what)
+    print(", ".join(f"{k}={v}" for k, v in counts.items()))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "leagues":
         return cmd_leagues()
     if args.command == "run":
         return cmd_run(args)
+    if args.command == "derive":
+        return cmd_derive(args)
     return 2
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-__all__ = ["main", "json"]

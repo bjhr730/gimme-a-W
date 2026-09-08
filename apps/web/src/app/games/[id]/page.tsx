@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { LocalTime } from "@/components/local-time";
 import { StatusPill } from "@/components/status-pill";
 import { TeamLogo } from "@/components/team-logo";
-import { STAT_LABELS, STAT_ORDER, americanOdds, signed, statNumber } from "@/lib/format";
-import { gameById } from "@/lib/queries";
+import { FootballBoxScore, SoccerLineup } from "@/components/player-stats";
+import { STAT_HIDDEN, STAT_LABELS, STAT_ORDER, americanOdds, signed, statNumber } from "@/lib/format";
+import { gameById, gamePicks, gamePlayers } from "@/lib/queries";
 
 export const revalidate = 60;
 
@@ -50,6 +51,9 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const g = await gameById(Number(id));
   if (!g) notFound();
+  const [players, picks] = await Promise.all([gamePlayers(g.id), gamePicks(g.id)]);
+  const awayPlayers = players.filter((p) => p.teamId === g.away.id);
+  const homePlayers = players.filter((p) => p.teamId === g.home.id);
 
   const final = g.status === "final";
   const homeWin = final && g.homeScore !== null && g.awayScore !== null && g.homeScore > g.awayScore;
@@ -58,7 +62,7 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
   const statKeys = [
     ...STAT_ORDER.filter((k) => k in g.homeStats || k in g.awayStats),
     ...Object.keys({ ...g.homeStats, ...g.awayStats }).filter(
-      (k) => !STAT_ORDER.includes(k) && !["form", "record", "rank", "appearances", "totalGoals", "goalAssists"].includes(k),
+      (k) => !STAT_ORDER.includes(k) && !STAT_HIDDEN.has(k),
     ),
   ];
   const soccer = g.sportId === "soccer";
@@ -230,10 +234,47 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
         </section>
       ) : null}
 
-      <section className="mt-4 rounded-md border border-dashed border-line-strong px-4 py-4 text-sm text-ink-2">
+      {players.length > 0 ? (
+        <section className="mt-4 grid gap-4 lg:grid-cols-2">
+          {[
+            { team: g.away, rows: awayPlayers },
+            { team: g.home, rows: homePlayers },
+          ].map(({ team, rows }) => (
+            <div key={team.id} className="min-w-0 rounded-md border border-line bg-surface">
+              <h2 className="label flex items-center gap-2 border-b border-line px-3 py-1.5 text-xs text-ink-2">
+                <TeamLogo src={team.logoUrl} name={team.name} size={18} />
+                {team.name}
+              </h2>
+              <div className="px-1 py-1">
+                {soccer ? <SoccerLineup rows={rows} /> : <FootballBoxScore rows={rows} />}
+              </div>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      <section className="mt-4 rounded-md border border-dashed border-line-strong px-4 py-3 text-sm text-ink-2">
         <span className="label text-[11px] text-muted">Prediction</span>
-        <p className="mt-1">
-          Model predictions arrive in phase 4. For now the bookmaker line above is the best available estimate.
+        {picks.length > 0 ? (
+          <ul className="mt-1 grid gap-1">
+            {picks.map((p) => (
+              <li key={p.author} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-semibold text-ink">{p.author}</span>
+                {p.pickTeam ? (
+                  <span>
+                    {p.pickTeam.shortName ?? p.pickTeam.name}
+                    {p.winProbability ? (
+                      <span className="tnum"> {Math.round(Number(p.winProbability) * 100)}% to win</span>
+                    ) : null}
+                  </span>
+                ) : null}
+                {p.spread ? <span className="tnum text-muted">spread {signed(Number(p.spread))}</span> : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <p className="mt-1 text-muted">
+          Our own model arrives in phase 4. Until then the bookmaker line and the picks above are the best estimates available.
         </p>
       </section>
     </>

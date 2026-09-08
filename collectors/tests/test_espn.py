@@ -97,7 +97,10 @@ def test_external_ids_are_sport_scoped(fixture):
     games = espn.parse_scoreboard(fixture("espn/nfl-scoreboard.json"), espn.league("nfl"))
     assert games[0].external_id.startswith("s:20~l:28~e:")
     assert games[0].venue is not None and games[0].venue.external_id.startswith("football:")
-    assert espn.team_external_id({"id": "7"}, espn.league("eng.1")) == "soccer:7"
+    # payloads without a uid (rosters) must rebuild the same uid shape
+    assert espn.team_external_id({"id": "7"}, espn.league("eng.1")) == "s:600~t:7"
+    assert espn.team_external_id({"id": "26"}, espn.league("nfl")) == "s:20~l:28~t:26"
+    assert espn.team_external_id({"id": "52"}, espn.league("college-football")) == "s:20~l:23~t:52"
 
 
 def test_teams(fixture):

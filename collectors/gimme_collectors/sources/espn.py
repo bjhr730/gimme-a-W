@@ -17,6 +17,8 @@ from datetime import UTC, date, datetime
 from typing import Any
 from urllib.parse import urlencode
 
+import httpx
+
 from gimme_collectors.models import (
     CollectResult,
     CompetitionRef,
@@ -53,6 +55,9 @@ class League:
     scoreboard_params: dict[str, str] = field(default_factory=dict)
     teams_params: dict[str, str] = field(default_factory=dict)
     standings_params: dict[str, str] = field(default_factory=dict)
+    # ESPN uid prefix for entities in this league: "s:20~l:28" (NFL), "s:600" (soccer).
+    # Used to rebuild a uid when a payload only carries the numeric id.
+    uid_prefix: str = "s:600"
 
     def competition(self) -> CompetitionRef:
         return CompetitionRef(
@@ -82,6 +87,7 @@ LEAGUES: dict[str, League] = {
             sport="american_football",
             country="USA",
             level="pro",
+            uid_prefix="s:20~l:28",
         ),
         League(
             slug="college-football",
@@ -94,6 +100,7 @@ LEAGUES: dict[str, League] = {
             scoreboard_params={"groups": "80", "limit": "400"},
             teams_params={"groups": "80", "limit": "400"},
             standings_params={"group": "80"},
+            uid_prefix="s:20~l:23",
         ),
         _soccer("eng.1", "English Premier League", "England"),
         _soccer("eng.2", "English Championship", "England"),
@@ -220,7 +227,7 @@ def team_external_id(t: dict[str, Any], lg: League) -> str:
     a college). The `uid` ("s:600~t:359", "s:20~l:28~t:17") is unique across everything,
     so it is the external id. Fall back to a sport-scoped id if uid is missing."""
     uid = t.get("uid")
-    return str(uid) if uid else f"{lg.espn_sport}:{t['id']}"
+    return str(uid) if uid else f"{lg.uid_prefix}~t:{t['id']}"
 
 
 def _team(t: dict[str, Any], lg: League) -> TeamRef:
@@ -561,6 +568,49 @@ class EspnAdapter:
         result.fetched_urls.append(url)
         result.standings.extend(parse_standings(payload, lg, as_of))
 
+    def summaries(self, lg: League, days: list[date], result: CollectResult) -> None:
+        """Game summaries for every event on the given days (box scores, lineups, FPI)."""
+        from gimme_collectors.sources import espn_summary
+
+        seen: set[str] = set()
+        for day in days:
+            url = scoreboard_url(lg, day)
+            payload, _ = self.fetcher.get_json(url)
+            if url not in result.fetched_urls:
+                result.fetched_urls.append(url)
+            for ev in payload.get("events") or []:
+                event_id = str(ev.get("id") or "")
+                if not event_id or event_id in seen:
+                    continue
+                seen.add(event_id)
+                surl = espn_summary.summary_url(lg, event_id)
+                body, fetched = self.fetcher.get_json(surl)
+                result.fetched_urls.append(surl)
+                summary = espn_summary.parse_summary(body, lg, captured_at=fetched.fetched_at)
+                if summary is not None:
+                    result.summaries.append(summary)
+
+    def rosters(self, lg: League, result: CollectResult) -> None:
+        """Current roster of every team in the league (one request per team)."""
+        from gimme_collectors.sources import espn_summary
+
+        url = teams_url(lg)
+        payload, _ = self.fetcher.get_json(url)
+        result.fetched_urls.append(url)
+        for record in parse_teams(payload, lg):
+            team_id = espn_summary.team_id_from_external(record.team.external_id)
+            if not team_id:
+                continue
+            rurl = espn_summary.roster_url(lg, team_id)
+            try:
+                body, _ = self.fetcher.get_json(rurl)
+            except httpx.HTTPStatusError as exc:
+                # ESPN 404s a few rosters (relocated or inactive teams). Keep going.
+                print(f"[{lg.slug}] roster skipped for team {team_id}: {exc.response.status_code}")
+                continue
+            result.fetched_urls.append(rurl)
+            result.rosters.extend(espn_summary.parse_roster(body, lg))
+
     def collect(self, lg: League, *, kinds: set[str], days: list[date]) -> CollectResult:
         result = CollectResult()
         if "teams" in kinds:
@@ -570,4 +620,8 @@ class EspnAdapter:
                 self.scoreboard(lg, day, result)
         if "standings" in kinds:
             self.standings(lg, max(days) if days else date.today(), result)
+        if "summary" in kinds:
+            self.summaries(lg, days, result)
+        if "roster" in kinds:
+            self.rosters(lg, result)
         return result
