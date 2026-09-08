@@ -11,6 +11,9 @@ type Metrics = {
   train_games?: number;
   seasons?: Season[];
   overall?: Record<string, number>;
+  // how the injury report changed a props run
+  players_withheld_unavailable?: number;
+  players_flagged_doubtful?: number;
 };
 
 function num(v: unknown, digits = 4): string {
@@ -195,7 +198,13 @@ export default async function ModelsPage() {
                     <span className="text-muted"> · {r.modelName} {r.modelVersion}</span>
                   </span>
                   <span className="tnum text-ink-2">
-                    {r.snapshotCount} games · trained on {m.train_games ?? "–"} · {r.startedAt.toISOString().slice(0, 16).replace("T", " ")} UTC
+                    {r.snapshotCount} games · trained on {m.train_games ?? "–"}
+                    {m.players_withheld_unavailable
+                      ? ` · ${m.players_withheld_unavailable} held out injured`
+                      : ""}
+                    {m.players_flagged_doubtful ? ` · ${m.players_flagged_doubtful} doubtful` : ""}
+                    {" · "}
+                    {r.startedAt.toISOString().slice(0, 16).replace("T", " ")} UTC
                   </span>
                 </li>
               );

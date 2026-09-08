@@ -175,8 +175,10 @@ export function ParlayBuilder({ legs, day }: { legs: ParlayLeg[]; day: string })
       <p className="mt-3 max-w-[70ch] text-xs text-muted">
         One leg per game, because two calls on the same match rise and fall together and
         multiplying them would flatter the parlay. Legs above 95% are left out: they add
-        nothing and no book prices them. The fair price carries no bookmaker margin, so a
-        real ticket will pay less. These are model probabilities, not betting advice.
+        nothing and no book prices them. Legs drawn from the same market share one model,
+        so if that model runs hot they miss together and the real chance is lower than the
+        product suggests. The fair price carries no bookmaker margin, so a real ticket will
+        pay less. These are model probabilities, not betting advice.
       </p>
     </>
   );
