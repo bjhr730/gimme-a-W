@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "description": "Sports prediction app: soccer, NFL and college football",
   "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
     "db:generate": "pnpm --filter @gimme/db generate",
     "db:migrate": "pnpm --filter @gimme/db migrate",
     "db:check": "pnpm --filter @gimme/db check",

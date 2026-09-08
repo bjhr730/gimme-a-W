@@ -3,6 +3,7 @@ packages:
   - packages/*
 
 # pnpm 12 refuses dependency install scripts unless listed here.
-# esbuild (pulled in by drizzle-kit and tsx) needs its postinstall to place the binary.
+# esbuild (drizzle-kit, tsx) and sharp (next/image, icon script) need their postinstall.
 allowBuilds:
   esbuild: true
+  sharp: true

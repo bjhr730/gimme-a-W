@@ -1,8 +1,8 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import * as schema from "./schema.js";
+import * as schema from "./schema";
 
-export * from "./schema.js";
+export * from "./schema";
 export { schema };
 
 export type Database = ReturnType<typeof createDb>;

@@ -263,8 +263,8 @@ Never commit `.env`. Commit `.env.example` with empty values instead.
 |---|---|
 | **0 — Scaffold** (done) | README, `.gitignore`, logo, monorepo skeleton, tooling |
 | **1 — Data spine** (done) | Drizzle schema + migrations · ESPN adapter for soccer/NFL/CFB · CLI · CI and daily collect workflows |
-| **2 — Web v1** (next) | Mobile-first responsive layout · home with today's games per sport · team, player, standings and game pages · search · PWA manifest and icons from the logo |
-| **3 — Depth** | Sports-Reference, CFBD, nflverse, football-data.co.uk adapters · `team_form` and `rating` computation · advanced stats on pages |
+| **2 — Web v1** (done) | Mobile-first Next.js app · today's games per sport with a date strip · game pages with stats and lines · team and standings pages · search · PWA manifest and icons from the logo. Player pages wait for roster data in phase 3 |
+| **3 — Depth** (next) | Sports-Reference, CFBD, nflverse, football-data.co.uk adapters · `team_form` and `rating` computation · advanced stats on pages |
 | **4 — Game predictions** | Match result (1X2), win probability, total goals, total points · back-test harness vs closing lines · `/models` page |
 | **5 — Team and player markets** | Shots on target, corners, anytime goalscorer, anytime TD, passing/rushing/receiving yards · explanation panel per prediction |
 | **6 — Production** | Vercel + Neon + GitHub secrets · daily collect and predict workflows · monitoring of collector runs and model drift |

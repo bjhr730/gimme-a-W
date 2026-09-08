@@ -1,0 +1,32 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "node --test",
+    "icons": "node scripts/icons.mjs"
+  },
+  "dependencies": {
+    "@gimme/db": "workspace:*",
+    "drizzle-orm": "^0.44.5",
+    "next": "^15.5.4",
+    "postgres": "^3.4.7",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.13",
+    "@types/node": "^24.5.0",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "dotenv": "^17.2.2",
+    "sharp": "^0.34.3",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.2"
+  }
+}

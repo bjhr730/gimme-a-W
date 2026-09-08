@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/* Design tokens. Light is the default; dark follows the OS. */
+:root {
+  --ground: #f2f4f0;
+  --surface: #ffffff;
+  --surface-2: #e9ede8;
+  --ink: #14211a;
+  --ink-2: #4b5a51;
+  --muted: #7c8a81;
+  --line: #d3dad3;
+  --line-strong: #aeb9b0;
+  --pitch: #1d7a46;
+  --pitch-soft: #dff0e5;
+  --leather: #b5581c;
+  --leather-soft: #f6e6d9;
+  --live: #c9302c;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0f1613;
+    --surface: #171f1a;
+    --surface-2: #1f2a23;
+    --ink: #e6ebe6;
+    --ink-2: #b4c0b7;
+    --muted: #7f8f85;
+    --line: #2a3630;
+    --line-strong: #3c4b42;
+    --pitch: #3fb26f;
+    --pitch-soft: #163523;
+    --leather: #e0813f;
+    --leather-soft: #3a2415;
+    --live: #ff6b66;
+  }
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-pitch: var(--pitch);
+  --color-pitch-soft: var(--pitch-soft);
+  --color-leather: var(--leather);
+  --color-leather-soft: var(--leather-soft);
+  --color-live: var(--live);
+  --font-display: var(--font-display), "Arial Narrow", Impact, sans-serif;
+  --font-body: var(--font-body), "Segoe UI", system-ui, sans-serif;
+}
+
+html {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100dvh;
+  overflow-x: hidden;
+  /* room for the fixed bottom tab bar on phones */
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  body {
+    padding-bottom: 48px;
+  }
+}
+
+.display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.label {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
