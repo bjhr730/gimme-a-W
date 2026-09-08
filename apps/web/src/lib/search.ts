@@ -287,11 +287,23 @@ export async function runSearch(rawQuery: string): Promise<SearchResult> {
   let interpretation = "";
   const now = new Date();
   // two distinct teams named by different tokens -> head to head
-  const distinctByToken: number[] = [];
+  // Collect every club a token points at, then take the two the ranking liked
+  // best. Stopping at the first two in token order got "inter milan real madrid"
+  // wrong: "inter" and "milan" land on two different clubs, and Real Madrid, the
+  // club the query is actually about, never got a turn.
+  const hitRank = new Map<number, number>();
   for (const t of teamTokens) {
-    const hit = teams.find((tm) => normalize(`${tm.name} ${tm.abbreviation ?? ""}`).split(" ").includes(t) || normalize(tm.name).includes(t));
-    if (hit && !distinctByToken.includes(hit.id)) distinctByToken.push(hit.id);
+    const index = teams.findIndex(
+      (tm) =>
+        normalize(`${tm.name} ${tm.abbreviation ?? ""}`).split(" ").includes(t) ||
+        normalize(tm.name).includes(t),
+    );
+    if (index >= 0 && !hitRank.has(teams[index].id)) hitRank.set(teams[index].id, index);
   }
+  const distinctByToken = [...hitRank.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .slice(0, 2)
+    .map(([id]) => id);
   if (distinctByToken.length >= 2) {
     const [a, b] = distinctByToken;
     const rows = await gameSelect()
@@ -302,6 +314,12 @@ export async function runSearch(rawQuery: string): Promise<SearchResult> {
     const na = teams.find((t) => t.id === a)?.name;
     const nb = teams.find((t) => t.id === b)?.name;
     interpretation = `Games between ${na} and ${nb}`;
+    // The tokens have been spent naming two clubs, so a player who merely shares
+    // a fragment with one of them is noise: "man city porto" was surfacing
+    // Manzur and Mansfield under the fixtures. Keep only a player the whole
+    // phrase actually names.
+    const phrase = teamTokens.join(" ");
+    players = players.filter((p) => normalize(p.fullName).includes(phrase));
   } else if (teams.length >= 1 && (teamTokens.length > 0)) {
     const id = teams[0].id;
     const filters = [or(eq(game.homeTeamId, id), eq(game.awayTeamId, id))];
