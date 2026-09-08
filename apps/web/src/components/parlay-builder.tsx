@@ -69,7 +69,12 @@ function americanFromProbability(p: number): string {
 export function ParlayBuilder({ legs, day }: { legs: ParlayLeg[]; day: string }) {
   const max = Math.min(20, legs.length);
   const [count, setCount] = useState(Math.min(4, max));
-  const chosen = legs.slice(0, count);
+  // The legs are ordered so that any prefix is both likely and varied; within the
+  // slice actually shown, the likeliest reads first.
+  const chosen = legs
+    .slice(0, count)
+    .slice()
+    .sort((a, b) => b.probability - a.probability);
   const combined = chosen.reduce((acc, l) => acc * l.probability, 1);
   const decimal = combined > 0 ? 1 / combined : 0;
   const dayLabel = new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
@@ -174,11 +179,13 @@ export function ParlayBuilder({ legs, day }: { legs: ParlayLeg[]; day: string })
 
       <p className="mt-3 max-w-[70ch] text-xs text-muted">
         One leg per game, because two calls on the same match rise and fall together and
-        multiplying them would flatter the parlay. Legs above 95% are left out: they add
-        nothing and no book prices them. Legs drawn from the same market share one model,
-        so if that model runs hot they miss together and the real chance is lower than the
-        product suggests. The fair price carries no bookmaker margin, so a real ticket will
-        pay less. These are model probabilities, not betting advice.
+        multiplying them would flatter the parlay. Markets are mixed rather than ranked on
+        probability alone: legs drawn from one market share a model, so if that model runs
+        hot they miss together and the real chance is lower than the product suggests. A
+        game contributes whichever of its calls the ticket needs. Legs above 95% are left
+        out, since they add nothing and no book prices them. The fair price carries no
+        bookmaker margin, so a real ticket will pay less. These are model probabilities,
+        not betting advice.
       </p>
     </>
   );

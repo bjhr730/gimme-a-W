@@ -490,12 +490,65 @@ export type ParlayLeg = {
 // A leg the model puts above this is not a real market: it adds nothing to a
 // parlay and says more about model confidence than about the game.
 const PARLAY_CEILING = 0.95;
+// How many of a game's best calls to consider. Only one is ever used, but having
+// alternatives lets a game contribute a different market when its best one is
+// already well represented, rather than dropping the game from the ticket.
+const CANDIDATES_PER_GAME = 5;
+// No family may hold more than this share of the legs chosen so far. Ranking on
+// probability alone put team shots on target in every one of the top slots.
+const MAX_FAMILY_SHARE = 0.5;
+
+/** Markets that move together and read as "the same kind of bet" on a ticket. */
+const MARKET_FAMILY: Record<string, string> = {
+  match_result: "result",
+  win_probability: "result",
+  total_goals: "goals",
+  btts: "goals",
+  corners: "corners",
+  match_corners: "corners",
+  shots_on_target: "shots",
+  player_shots_on_target: "shots",
+  anytime_scorer: "scorer",
+  anytime_td: "scorer",
+  anytime_assist: "assist",
+};
+
+function family(market: string): string {
+  return MARKET_FAMILY[market] ?? market;
+}
 
 /**
- * The most likely call in each of the day's games, best first.
+ * Order the legs so any prefix is both likely and varied.
  *
- * One leg per game on purpose. Two legs from the same match move together, so
- * multiplying them would overstate the parlay's chance of landing.
+ * Walks down the candidates by probability, taking the best one whose game is
+ * unused and whose market family still has room. When nothing fits the family
+ * limit, the most probable remaining leg wins, so a thin slate still fills up.
+ */
+function mixMarkets(candidates: ParlayLeg[], limit: number): ParlayLeg[] {
+  const chosen: ParlayLeg[] = [];
+  const usedGames = new Set<number>();
+  const counts = new Map<string, number>();
+  while (chosen.length < limit) {
+    const cap = Math.max(1, Math.floor((chosen.length + 1) * MAX_FAMILY_SHARE));
+    const withinCap = candidates.find(
+      (c) => !usedGames.has(c.gameId) && (counts.get(family(c.market)) ?? 0) + 1 <= cap,
+    );
+    const pick = withinCap ?? candidates.find((c) => !usedGames.has(c.gameId));
+    if (!pick) break;
+    chosen.push(pick);
+    usedGames.add(pick.gameId);
+    counts.set(family(pick.market), (counts.get(family(pick.market)) ?? 0) + 1);
+  }
+  return chosen;
+}
+
+/**
+ * One call from each of the day's games, likeliest first and mixed by market.
+ *
+ * One leg per game on purpose: two legs from the same match move together, so
+ * multiplying them would overstate the parlay's chance of landing. Which of a
+ * game's calls gets used depends on what the ticket already holds, so the top of
+ * the list is not all the same market.
  */
 export async function parlayLegs(day: string, limit = 20): Promise<ParlayLeg[]> {
   const rows = await db().execute(sql`
@@ -505,7 +558,8 @@ export async function parlayLegs(day: string, limit = 20): Promise<ParlayLeg[]> 
       order by model_name, coalesce(notes, ''), id desc
     ),
     legs as (
-      select distinct on (p.game_id)
+      select
+        row_number() over (partition by p.game_id order by p.probability desc) as rank_in_game,
         p.game_id, p.market, p.selection, p.subject_type, p.subject_id,
         p.probability, p.line, g.kickoff,
         c.name as competition_name, c.slug as competition_slug,
@@ -526,11 +580,11 @@ export async function parlayLegs(day: string, limit = 20): Promise<ParlayLeg[]> 
         and g.status = 'scheduled'
         and g.kickoff > now()
         and to_char(g.kickoff at time zone ${SPORTS_TZ}, 'YYYY-MM-DD') = ${day}
-      order by p.game_id, p.probability desc
     )
-    select * from legs order by probability desc limit ${limit}
+    select * from legs where rank_in_game <= ${CANDIDATES_PER_GAME}
+    order by probability desc
   `);
-  return (rows as unknown as Record<string, unknown>[]).map((r) => ({
+  const candidates: ParlayLeg[] = (rows as unknown as Record<string, unknown>[]).map((r) => ({
     gameId: Number(r.game_id),
     market: String(r.market),
     selection: String(r.selection ?? ""),
@@ -550,6 +604,7 @@ export async function parlayLegs(day: string, limit = 20): Promise<ParlayLeg[]> 
     subjectTeamName: (r.subject_team_name as string) ?? null,
     subjectTeamShort: (r.subject_team_short as string) ?? null,
   }));
+  return mixMarkets(candidates, limit);
 }
 
 /**
