@@ -5,20 +5,19 @@ name: Live scores
 # read 0-0 with no clock at 18:16. This job refreshes scores only, and only for
 # competitions with a ball actually in play.
 #
-# The repository is private, so Actions minutes are capped. Two things keep this
-# cheap: `gimme-collect live` asks the database what is on before touching the
-# network and exits in seconds when nothing is, and the dependency cache means a
-# quiet run costs well under a minute. Widen the schedule if the budget allows;
-# a public repository would remove the limit entirely.
+# `gimme-collect live` asks the database what is on before touching the network
+# and exits in seconds when nothing is, so a quiet run costs almost nothing and a
+# busy one costs a couple of range requests. The repository is public, so Actions
+# minutes are unlimited and the schedule can follow the games rather than a budget.
 
 on:
   schedule:
-    # Every 20 minutes through the European evening, which is where most of the
-    # slate sits. That is 21 runs a day, roughly 630 minutes a month against the
-    # 2,000 a private repository gets, which leaves room for the daily pipeline.
-    # Widen the hours or shorten the interval only with that budget in mind: a
-    # public repository has no limit and could poll every five minutes.
-    - cron: "*/20 17-23 * * *"
+    # Every five minutes, which is as often as GitHub schedules anything, across
+    # the hours these competitions actually play: European afternoons and evenings,
+    # then the Americas through the night. Only 05:00-09:00 UTC is left out, the
+    # one window with no kickoffs at all in the last 120 days, since a run in a
+    # dead hour still costs a checkout to discover there is nothing to do.
+    - cron: "*/5 0-4,10-23 * * *"
   workflow_dispatch:
 
 concurrency:
