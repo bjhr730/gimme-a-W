@@ -46,3 +46,6 @@ jobs:
       - name: Recompute team form and Elo ratings
         if: always()
         run: uv run gimme-collect derive --what form,elo
+      - name: Predict games in the coming eight days
+        if: always()
+        run: uv run gimme-predict run --days 8

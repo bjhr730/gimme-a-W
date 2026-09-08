@@ -43,3 +43,6 @@ jobs:
       - name: Recompute team form and Elo ratings
         if: always()
         run: uv run gimme-collect derive --what form,elo
+      - name: Back-test the models against the closing line
+        if: always()
+        run: uv run gimme-predict backtest

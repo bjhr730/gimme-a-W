@@ -1,9 +1,17 @@
 import Link from "next/link";
 import type { GameRow } from "@/lib/queries";
-import { GameCard } from "./game-card";
+import { GameCard, type WinPick } from "./game-card";
 
 /** Games grouped by competition, in the order they were fetched (kickoff then name). */
-export function GameGroups({ games, emptyText }: { games: GameRow[]; emptyText: string }) {
+export function GameGroups({
+  games,
+  emptyText,
+  picks,
+}: {
+  games: GameRow[];
+  emptyText: string;
+  picks?: Map<number, WinPick>;
+}) {
   if (games.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-line-strong px-4 py-8 text-center text-ink-2">
@@ -28,7 +36,7 @@ export function GameGroups({ games, emptyText }: { games: GameRow[]; emptyText: 
             </Link>
           </header>
           {group.games.map((g) => (
-            <GameCard key={g.id} g={g} />
+            <GameCard key={g.id} g={g} pick={picks?.get(g.id)} />
           ))}
         </section>
       ))}

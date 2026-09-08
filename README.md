@@ -243,6 +243,14 @@ uv run pytest
 `--kind all` collects scoreboards, teams, standings and game summaries (box scores, lineups,
 ESPN FPI picks). Rosters are separate because they cost one request per team.
 
+Predictions (the daily workflow runs these after collecting):
+
+```bash
+uv run gimme-predict backtest --competition nfl     # season-by-season vs the closing line
+uv run gimme-predict run --sport american_football  # writes predictions for the next 8 days
+uv run gimme-predict run --sport soccer --dry-run   # needs ~30 finals per league to fit
+```
+
 History loads (one-off, then refreshed weekly by the workflow):
 
 ```bash
@@ -279,7 +287,7 @@ Never commit `.env`. Commit `.env.example` with empty values instead.
 | **2 — Web v1** (done) | Mobile-first Next.js app · today's games per sport with a date strip · game pages with stats and lines · team and standings pages · search · PWA manifest and icons from the logo. Player pages wait for roster data in phase 3 |
 | **3 — Depth** (done, ESPN part) | ESPN game summaries (full team box scores, per-player passing/rushing/receiving and goals/shots, soccer lineups, FPI picks) · ESPN rosters · `team_form` and Elo `rating` derivations · player pages, box scores on game pages, form/Elo/roster on team pages · weekly roster workflow |
 | **3b — Historical depth** (done) | nflverse: NFL games since 2015 with closing lines, weather and rest days, weekly player stats with EPA and target share · football-data.co.uk: league seasons with shots on target, corners and Bet365/Pinnacle opening and closing odds, matched to ESPN teams by name · Elo with season regression · weekly refresh workflow. CFBD when a key is added; Sports-Reference last, under its rate limit |
-| **4 — Game predictions** | Match result (1X2), win probability, total goals, total points · back-test harness vs closing lines · `/models` page |
+| **4 — Game predictions** (done) | `gimme_predict`: point-in-time features (Elo, rest, form), logistic win probability + ridge spread and total for football, Dixon-Coles Poisson for soccer (1X2, total goals, team goals, both teams to score), 60/40 blend with the market, season-by-season back-test vs the closing line stored in `model_run`, daily prediction run · "Who gets the W" panel on game pages, model pick chips on score cards, `/models` page |
 | **5 — Team and player markets** | Shots on target, corners, anytime goalscorer, anytime TD, passing/rushing/receiving yards · explanation panel per prediction |
 | **6 — Production** | Vercel + Neon + GitHub secrets · daily collect and predict workflows · monitoring of collector runs and model drift |
 

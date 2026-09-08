@@ -34,7 +34,37 @@ function Side({
   );
 }
 
-export function GameCard({ g }: { g: GameRow }) {
+export type WinPick = { selection: string; probability: number };
+
+function PickChip({ g, pick }: { g: GameRow; pick: WinPick }) {
+  const team = pick.selection === "home" ? g.home : pick.selection === "away" ? g.away : null;
+  const label = team ? (team.abbreviation ?? team.shortName ?? team.name) : "Draw";
+  const pct = Math.round(pick.probability * 100);
+  const hit =
+    g.status === "final" && g.homeScore !== null && g.awayScore !== null
+      ? pick.selection === "home"
+        ? g.homeScore > g.awayScore
+        : pick.selection === "away"
+          ? g.awayScore > g.homeScore
+          : g.homeScore === g.awayScore
+      : null;
+  return (
+    <span
+      className={`label mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${
+        hit === null
+          ? "bg-pitch-soft text-pitch"
+          : hit
+            ? "bg-pitch text-white"
+            : "bg-surface-2 text-muted line-through"
+      }`}
+      title="Our model's pick and win probability"
+    >
+      W {label} {pct}%
+    </span>
+  );
+}
+
+export function GameCard({ g, pick }: { g: GameRow; pick?: WinPick }) {
   const played = g.status === "final" || g.status === "in_progress";
   const hs = g.homeScore;
   const as = g.awayScore;
@@ -49,13 +79,14 @@ export function GameCard({ g }: { g: GameRow }) {
         <Side team={g.away} score={as} winner={awayWin} played={played} />
         <Side team={g.home} score={hs} winner={homeWin} played={played} />
       </div>
-      <div className="w-16 text-right">
+      <div className="flex w-20 flex-col items-end text-right">
         <StatusPill
           status={g.status}
           detail={g.statusDetail}
           kickoff={g.kickoff}
           clock={g.clock}
         />
+        {pick ? <PickChip g={g} pick={pick} /> : null}
       </div>
     </Link>
   );

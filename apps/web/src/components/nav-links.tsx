@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/soccer", label: "Soccer", glyph: "⚽" },
   { href: "/nfl", label: "NFL", glyph: "🏈" },
   { href: "/cfb", label: "CFB", glyph: "🎓" },
+  { href: "/models", label: "Models", glyph: "◔" },
 ];
 
 export function NavLinks({ variant }: { variant: "top" | "bottom" }) {
@@ -34,7 +35,7 @@ export function NavLinks({ variant }: { variant: "top" | "bottom" }) {
   }
 
   return (
-    <ul className="grid grid-cols-4">
+    <ul className="grid grid-cols-5">
       {LINKS.map((l) => (
         <li key={l.href}>
           <Link

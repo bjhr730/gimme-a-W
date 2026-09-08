@@ -3,10 +3,12 @@ import { alias } from "drizzle-orm/pg-core";
 import {
   competition,
   game,
+  modelRun,
   odds,
   pick,
   player,
   playerGameStat,
+  prediction,
   rating,
   roster,
   season,
@@ -16,6 +18,7 @@ import {
   teamGameStat,
   venue,
 } from "@gimme/db";
+import { inArray } from "drizzle-orm";
 import { db } from "./db";
 
 const home = alias(team, "home");
@@ -152,6 +155,7 @@ export async function gameById(id: number) {
         line: odds.line,
         price: odds.price,
         capturedAt: odds.capturedAt,
+        isClosing: odds.isClosing,
       })
       .from(odds)
       .where(eq(odds.gameId, id))
@@ -457,6 +461,106 @@ export async function playerById(id: number) {
       .limit(25),
   ]);
   return { player: p, teams, log };
+}
+
+// ------------------------------------------------------------ phase 4
+
+export type PredictionRow = {
+  market: string;
+  selection: string;
+  probability: string | null;
+  mean: string | null;
+  line: string | null;
+  quantiles: unknown;
+  explanation: unknown;
+  modelName: string;
+  modelVersion: string;
+  createdAt: Date;
+};
+
+/** Our latest model output for one game: rows from the most recent model run per market. */
+export async function gamePredictions(gameId: number): Promise<PredictionRow[]> {
+  const rows = await db()
+    .select({
+      market: prediction.market,
+      selection: prediction.selection,
+      probability: prediction.probability,
+      mean: prediction.mean,
+      line: prediction.line,
+      quantiles: prediction.quantiles,
+      explanation: prediction.explanation,
+      modelName: modelRun.modelName,
+      modelVersion: modelRun.modelVersion,
+      createdAt: prediction.createdAt,
+      runId: modelRun.id,
+    })
+    .from(prediction)
+    .innerJoin(modelRun, eq(prediction.modelRunId, modelRun.id))
+    .where(eq(prediction.gameId, gameId))
+    .orderBy(desc(modelRun.id));
+  const latestRun = rows[0]?.runId;
+  return rows.filter((r) => r.runId === latestRun);
+}
+
+/** Favored side per game for score cards: {gameId -> {selection, probability}}. */
+export async function winProbabilities(gameIds: number[]) {
+  if (gameIds.length === 0) return new Map<number, { selection: string; probability: number }>();
+  const rows = await db()
+    .select({
+      gameId: prediction.gameId,
+      market: prediction.market,
+      selection: prediction.selection,
+      probability: prediction.probability,
+      runId: prediction.modelRunId,
+    })
+    .from(prediction)
+    .where(
+      and(
+        inArray(prediction.gameId, gameIds),
+        inArray(prediction.market, ["win_probability", "match_result"]),
+      ),
+    )
+    .orderBy(desc(prediction.modelRunId));
+  const out = new Map<number, { selection: string; probability: number }>();
+  const runFor = new Map<number, number>();
+  for (const r of rows) {
+    const run = runFor.get(r.gameId) ?? r.runId;
+    runFor.set(r.gameId, run);
+    if (r.runId !== run || r.probability === null) continue;
+    const p = Number(r.probability);
+    const current = out.get(r.gameId);
+    if (!current || p > current.probability) out.set(r.gameId, { selection: r.selection, probability: p });
+  }
+  return out;
+}
+
+/** Latest finished model runs (one per model + competition) with their metrics. */
+export async function modelRuns() {
+  const rows = await db()
+    .select({
+      id: modelRun.id,
+      modelName: modelRun.modelName,
+      modelVersion: modelRun.modelVersion,
+      sportId: modelRun.sportId,
+      startedAt: modelRun.startedAt,
+      status: modelRun.status,
+      snapshotCount: modelRun.snapshotCount,
+      metrics: modelRun.metrics,
+      notes: modelRun.notes,
+    })
+    .from(modelRun)
+    .where(eq(modelRun.status, "succeeded"))
+    .orderBy(desc(modelRun.id))
+    .limit(200);
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const m = (r.metrics ?? {}) as { competition?: string; seasons?: unknown };
+    const kind = m.seasons ? "backtest" : "run";
+    const key = `${r.modelName}|${m.competition ?? r.notes ?? ""}|${kind}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function searchPlayers(q: string) {

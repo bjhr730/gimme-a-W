@@ -3,7 +3,12 @@ import { DateStrip } from "@/components/date-strip";
 import { GameGroups } from "@/components/game-groups";
 import { PageTitle } from "@/components/page-title";
 import { SPORTS, addDays, longDate, parseDateParam, todayIso, type SportKey } from "@/lib/format";
-import { competitionsWithSeasons, daysWithGames, gamesForDate } from "@/lib/queries";
+import {
+  competitionsWithSeasons,
+  daysWithGames,
+  gamesForDate,
+  winProbabilities,
+} from "@/lib/queries";
 
 export async function SportPage({
   sport,
@@ -27,6 +32,7 @@ export async function SportPage({
   const tables = meta.competition
     ? competitions.filter((c) => c.slug === meta.competition)
     : competitions;
+  const picks = await winProbabilities(games.map((g) => g.id));
 
   return (
     <>
@@ -34,7 +40,7 @@ export async function SportPage({
       <div className="mb-4">
         <DateStrip base={`/${sport}`} selected={day} today={today} withGames={withGames} />
       </div>
-      <GameGroups games={games} emptyText={`No ${meta.label} games on this day.`} />
+      <GameGroups games={games} picks={picks} emptyText={`No ${meta.label} games on this day.`} />
 
       <section className="mt-8">
         <h2 className="label mb-2 text-xs text-muted">Standings</h2>

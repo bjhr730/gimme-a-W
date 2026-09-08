@@ -4,8 +4,9 @@ import { LocalTime } from "@/components/local-time";
 import { StatusPill } from "@/components/status-pill";
 import { TeamLogo } from "@/components/team-logo";
 import { FootballBoxScore, SoccerLineup } from "@/components/player-stats";
+import { PredictionPanel } from "@/components/prediction-panel";
 import { STAT_HIDDEN, STAT_LABELS, STAT_ORDER, americanOdds, signed, statNumber } from "@/lib/format";
-import { gameById, gamePicks, gamePlayers } from "@/lib/queries";
+import { gameById, gamePicks, gamePlayers, gamePredictions } from "@/lib/queries";
 
 export const revalidate = 60;
 
@@ -51,7 +52,11 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const g = await gameById(Number(id));
   if (!g) notFound();
-  const [players, picks] = await Promise.all([gamePlayers(g.id), gamePicks(g.id)]);
+  const [players, picks, predictions] = await Promise.all([
+    gamePlayers(g.id),
+    gamePicks(g.id),
+    gamePredictions(g.id),
+  ]);
   const awayPlayers = players.filter((p) => p.teamId === g.away.id);
   const homePlayers = players.filter((p) => p.teamId === g.home.id);
 
@@ -108,6 +113,8 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
           {g.attendance ? <span className="tnum">Att. {g.attendance.toLocaleString("en-US")}</span> : null}
         </div>
       </section>
+
+      <PredictionPanel rows={predictions} home={g.home} away={g.away} soccer={soccer} />
 
       {(g.homeStats.form || g.awayStats.form || g.homeStats.record || g.awayStats.record) ? (
         <section className="mt-4 grid grid-cols-2 gap-2">
@@ -179,7 +186,7 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
         <section className="mt-4 rounded-md border border-line bg-surface">
           <h2 className="label flex items-center justify-between border-b border-line px-3 py-1.5 text-xs text-ink-2">
             <span>
-              {g.odds[0].is_closing ? "Closing lines" : "Lines"} · {g.odds[0].bookmaker}
+              {g.odds[0].isClosing ? "Closing lines" : "Lines"} · {g.odds[0].bookmaker}
               {g.otherBooks.length ? (
                 <span className="text-muted"> · also {g.otherBooks.join(", ")}</span>
               ) : null}
@@ -259,7 +266,7 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
       ) : null}
 
       <section className="mt-4 rounded-md border border-dashed border-line-strong px-4 py-3 text-sm text-ink-2">
-        <span className="label text-[11px] text-muted">Prediction</span>
+        <span className="label text-[11px] text-muted">Other picks</span>
         {picks.length > 0 ? (
           <ul className="mt-1 grid gap-1">
             {picks.map((p) => (
@@ -278,9 +285,13 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
             ))}
           </ul>
         ) : null}
-        <p className="mt-1 text-muted">
-          Our own model arrives in phase 4. Until then the bookmaker line and the picks above are the best estimates available.
-        </p>
+        {predictions.length === 0 ? (
+          <p className="mt-1 text-muted">
+            No model prediction for this game yet. Runs happen daily for games in the coming week.
+          </p>
+        ) : picks.length === 0 ? (
+          <p className="mt-1 text-muted">No third-party picks collected for this game.</p>
+        ) : null}
       </section>
     </>
   );
