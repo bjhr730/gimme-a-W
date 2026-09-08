@@ -114,9 +114,15 @@ def load_team_games(conn: psycopg.Connection[Any], competition_slug: str) -> lis
 def load_rosters(
     conn: psycopg.Connection[Any], team_ids: list[int]
 ) -> dict[int, list[dict[str, Any]]]:
-    """Current roster per team: each player listed once, under the team of their most
-    recent roster entry (latest season, then latest row), so a player who changed
-    clubs in the offseason no longer appears for both."""
+    """Current roster per team: each player listed once, under the club of their most
+    recent roster entry, so a player who changed clubs in the offseason no longer
+    appears for both.
+
+    Only this season's club rows count. National-team rows are ignored, because a
+    player belongs to a club and a country at once and the country is not a
+    transfer: a World Cup squad row is newer than a league registration, and
+    ordering on recency alone filed Mbappe under France. Rows from a season that
+    has ended are ignored too, because they say where someone used to play."""
     if not team_ids:
         return {}
     with conn.cursor(row_factory=dict_row) as cur:
@@ -129,7 +135,15 @@ def load_rosters(
                 FROM roster r
                 JOIN player p ON p.id = r.player_id
                 JOIN season s ON s.id = r.season_id
+                JOIN competition c ON c.id = s.competition_id
                 WHERE r.player_id IN (SELECT player_id FROM roster WHERE team_id = ANY(%s))
+                  AND c.level IS DISTINCT FROM 'international'
+                  AND s.year >= (
+                  SELECT MAX(s2.year) FROM roster r2
+                  JOIN season s2 ON s2.id = r2.season_id
+                  JOIN competition c2 ON c2.id = s2.competition_id
+                  WHERE c2.level IS DISTINCT FROM 'international'
+              )
                 ORDER BY r.player_id, s.year DESC, r.id DESC
             ) current
             WHERE team_id = ANY(%s)
@@ -143,12 +157,31 @@ def load_rosters(
 
 
 def rostered_anywhere(conn: psycopg.Connection[Any], player_ids: list[int]) -> set[int]:
-    """Players that have any roster row (so a stats-only fallback is not needed)."""
+    """Players with a club registration this season, so a stats-only fallback is
+    not needed.
+
+    A national-team row does not count, since it says nothing about where a player
+    turns out week to week. Nor does last season's club row: treating it as current
+    put Ollie Watkins back in Aston Villa's markets after he had left."""
     if not player_ids:
         return set()
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT DISTINCT player_id FROM roster WHERE player_id = ANY(%s)", (player_ids,)
+            """
+            SELECT DISTINCT r.player_id
+            FROM roster r
+            JOIN season s ON s.id = r.season_id
+            JOIN competition c ON c.id = s.competition_id
+            WHERE r.player_id = ANY(%s)
+              AND c.level IS DISTINCT FROM 'international'
+              AND s.year >= (
+                  SELECT MAX(s2.year) FROM roster r2
+                  JOIN season s2 ON s2.id = r2.season_id
+                  JOIN competition c2 ON c2.id = s2.competition_id
+                  WHERE c2.level IS DISTINCT FROM 'international'
+              )
+            """,
+            (player_ids,),
         )
         return {int(r[0]) for r in cur.fetchall()}
 
