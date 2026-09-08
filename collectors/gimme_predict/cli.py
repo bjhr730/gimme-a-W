@@ -16,9 +16,9 @@ from datetime import UTC, datetime, timedelta
 import psycopg
 
 from gimme_collectors.config import settings
-from gimme_predict import data, evaluate
+from gimme_predict import data, evaluate, props
 from gimme_predict.features import build_features
-from gimme_predict.markets import football, soccer
+from gimme_predict.markets import football, football_players, soccer, soccer_props
 
 SOCCER_DEFAULT = [
     "eng.1",
@@ -59,6 +59,11 @@ def _build_parser() -> argparse.ArgumentParser:
         p.add_argument("--competition", action="append", default=[], help="slug, repeatable")
         p.add_argument("--sport", choices=["soccer", "american_football"], default=None)
         p.add_argument("--json", action="store_true", help="print full metrics as JSON")
+        p.add_argument(
+            "--markets",
+            default="games,props",
+            help="games (result/spread/total) and/or props (player and team markets)",
+        )
         if name == "run":
             p.add_argument(
                 "--days", type=int, default=8, help="predict games kicking off within N days"
@@ -75,6 +80,7 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     from gimme_predict.writer import PredictionWriter
 
     writer = PredictionWriter(cfg.database_url)
+    markets = {m.strip() for m in args.markets.split(",")}
     with psycopg.connect(cfg.database_url) as conn:
         for slug in _competitions(args):
             games = data.load_games(conn, slug)
@@ -82,6 +88,30 @@ def cmd_backtest(args: argparse.Namespace) -> int:
                 print(f"[{slug}] no games")
                 continue
             sport = games[0].sport
+            if "props" in markets and sport != "soccer":
+                metrics = props.backtest_football(conn, slug, games)
+                if metrics:
+                    run_id = writer.begin(
+                        football_players.MODEL_NAME,
+                        football_players.MODEL_VERSION,
+                        sport,
+                        notes=f"backtest {slug}",
+                    )
+                    writer.finish(
+                        run_id,
+                        status="succeeded",
+                        metrics={"competition": slug, "props": metrics},
+                        snapshot_count=0,
+                    )
+                    holdout = metrics["holdout_season"]
+                    print(f"[{slug}] {football_players.MODEL_NAME} holdout {holdout}")
+                    for k, v in metrics.items():
+                        if isinstance(v, dict):
+                            print(f"  {k}: " + ", ".join(f"{a}={b}" for a, b in v.items()))
+                else:
+                    print(f"[{slug}] props: not enough player history to back-test")
+            if "games" not in markets:
+                continue
             if sport == "soccer":
                 results = evaluate.backtest_soccer(games)
                 name, version = soccer.MODEL_NAME, soccer.MODEL_VERSION
@@ -132,6 +162,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     horizon = datetime.now(UTC) + timedelta(days=args.days)
     since = datetime.now(UTC) - timedelta(hours=6)
     writer = None if args.dry_run else PredictionWriter(cfg.database_url)
+    markets = {m.strip() for m in args.markets.split(",")}
     with psycopg.connect(cfg.database_url) as conn:
         for slug in _competitions(args):
             games = data.load_games(conn, slug)
@@ -140,6 +171,45 @@ def cmd_run(args: argparse.Namespace) -> int:
                 print(f"[{slug}] nothing to predict")
                 continue
             sport = games[0].sport
+            if "props" in markets:
+                output = (
+                    props.predict_soccer(conn, slug, upcoming, games)
+                    if sport == "soccer"
+                    else props.predict_football(conn, slug, upcoming, games)
+                )
+                if output is None:
+                    print(f"[{slug}] props: not enough player history")
+                else:
+                    print(
+                        f"[{slug}] props: {len(output.football)} player lines, "
+                        f"{len(output.team_counts)} team counts, {len(output.scorers)} scorers"
+                    )
+                    for s in output.scorers[:3]:
+                        print(f"    scorer {s.name} {s.probability:.0%}")
+                    for p in output.football[:3]:
+                        value = p.mean if p.mean is not None else p.probability
+                        print(f"    {p.name} {p.market} {value}")
+                    if writer is not None:
+                        name = (
+                            soccer_props.MODEL_NAME
+                            if sport == "soccer"
+                            else football_players.MODEL_NAME
+                        )
+                        version = (
+                            soccer_props.MODEL_VERSION
+                            if sport == "soccer"
+                            else football_players.MODEL_VERSION
+                        )
+                        run_id = writer.begin(name, version, sport, notes=slug)
+                        writer.write_props(run_id, output)
+                        writer.finish(
+                            run_id,
+                            status="succeeded",
+                            metrics={"competition": slug, "train_rows": output.train_size},
+                            snapshot_count=output.count(),
+                        )
+            if "games" not in markets:
+                continue
             if sport == "soccer":
                 model = soccer.train(games)
                 if model is None:

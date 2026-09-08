@@ -189,5 +189,119 @@ class PredictionWriter:
                 self._prediction(cur, run_id, p.game_id, "btts", "yes", probability=p.btts)
         self.conn.commit()
 
+    def write_props(self, run_id: int, props: Any) -> None:
+        """props: gimme_predict.props.PropsOutput."""
+        with self.conn.cursor() as cur:
+            for p in props.football:
+                if p.market == "anytime_td":
+                    self._subject_prediction(
+                        cur,
+                        run_id,
+                        p.game_id,
+                        "anytime_td",
+                        "player",
+                        p.player_id,
+                        "yes",
+                        probability=p.probability,
+                        explanation=p.explanation,
+                    )
+                else:
+                    self._subject_prediction(
+                        cur,
+                        run_id,
+                        p.game_id,
+                        p.market,
+                        "player",
+                        p.player_id,
+                        "",
+                        mean=p.mean,
+                        quantiles={"p25": p.p25, "p75": p.p75},
+                        explanation=p.explanation,
+                    )
+            for t in props.team_counts:
+                subject_type = "team" if t.team_id is not None else "game"
+                subject_id = t.team_id if t.team_id is not None else t.game_id
+                self._subject_prediction(
+                    cur,
+                    run_id,
+                    t.game_id,
+                    t.market,
+                    subject_type,
+                    subject_id,
+                    "",
+                    mean=t.mean,
+                    explanation=t.explanation,
+                )
+                for selection, prob in t.lines.items():
+                    line = float(selection.split()[-1])
+                    self._subject_prediction(
+                        cur,
+                        run_id,
+                        t.game_id,
+                        t.market,
+                        subject_type,
+                        subject_id,
+                        selection,
+                        probability=prob,
+                        mean=t.mean,
+                        line=line,
+                    )
+            for s in props.scorers:
+                self._subject_prediction(
+                    cur,
+                    run_id,
+                    s.game_id,
+                    "anytime_scorer",
+                    "player",
+                    s.player_id,
+                    "yes",
+                    probability=s.probability,
+                    mean=s.expected_goals,
+                    explanation=s.explanation,
+                )
+        self.conn.commit()
+
+    def _subject_prediction(
+        self,
+        cur: Any,
+        run_id: int,
+        game_id: int,
+        market: str,
+        subject_type: str,
+        subject_id: int,
+        selection: str,
+        *,
+        probability: float | None = None,
+        mean: float | None = None,
+        line: float | None = None,
+        quantiles: dict[str, Any] | None = None,
+        explanation: dict[str, Any] | None = None,
+    ) -> None:
+        cur.execute(
+            """
+            INSERT INTO prediction (model_run_id, game_id, market, subject_type, subject_id,
+                                    selection, probability, mean, line, quantiles, explanation)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (model_run_id, game_id, market, subject_type, subject_id, selection)
+                DO UPDATE SET probability = EXCLUDED.probability, mean = EXCLUDED.mean,
+                    line = EXCLUDED.line, quantiles = EXCLUDED.quantiles,
+                    explanation = EXCLUDED.explanation
+            """,
+            (
+                run_id,
+                game_id,
+                market,
+                subject_type,
+                subject_id,
+                selection,
+                None if probability is None else round(probability, 5),
+                None if mean is None else round(mean, 3),
+                line,
+                Jsonb(quantiles or {}),
+                Jsonb(explanation or {}),
+            ),
+        )
+        self.rows += 1
+
     def close(self) -> None:
         self.conn.close()

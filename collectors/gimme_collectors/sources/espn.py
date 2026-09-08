@@ -143,11 +143,31 @@ def _url(base: str, lg: League, path: str, params: dict[str, str]) -> str:
     return f"{url}?{urlencode(params)}" if params else url
 
 
-def scoreboard_url(lg: League, day: date | None = None) -> str:
+def scoreboard_url(lg: League, day: date | None = None, end: date | None = None) -> str:
+    """One day, or an inclusive range (ESPN accepts dates=YYYYMMDD-YYYYMMDD)."""
     params = dict(lg.scoreboard_params)
-    if day is not None:
+    if day is not None and end is not None and end != day:
+        params["dates"] = f"{day.strftime('%Y%m%d')}-{end.strftime('%Y%m%d')}"
+        params.setdefault("limit", "1000")
+    elif day is not None:
         params["dates"] = day.strftime("%Y%m%d")
     return _url(SITE, lg, "scoreboard", params)
+
+
+def month_chunks(days: list[date]) -> list[tuple[date, date]]:
+    """Consecutive days grouped per calendar month: [(first, last), ...]."""
+    if not days:
+        return []
+    ordered = sorted(days)
+    chunks: list[tuple[date, date]] = []
+    start = prev = ordered[0]
+    for d in ordered[1:]:
+        if (d.year, d.month) != (prev.year, prev.month) or (d - prev).days > 1:
+            chunks.append((start, prev))
+            start = d
+        prev = d
+    chunks.append((start, prev))
+    return chunks
 
 
 def teams_url(lg: League) -> str:
@@ -228,6 +248,22 @@ def team_external_id(t: dict[str, Any], lg: League) -> str:
     so it is the external id. Fall back to a sport-scoped id if uid is missing."""
     uid = t.get("uid")
     return str(uid) if uid else f"{lg.uid_prefix}~t:{t['id']}"
+
+
+def event_season(ev: dict[str, Any], league_season: SeasonRef) -> SeasonRef:
+    """The season an event belongs to.
+
+    In a date-range response the league node describes the *current* season while
+    each event carries its own: {"year": 2019, "slug": "2019-20-english-premier-league"}
+    for split-year leagues, {"year": 2024, "slug": "regular-season"} for calendar ones.
+    """
+    s = ev.get("season") or {}
+    year = _int(s.get("year"))
+    if year is None or year == league_season.year:
+        return league_season
+    match = _SEASON_LABEL.search(str(s.get("slug") or ""))
+    label = match.group(0) if match else str(year)
+    return SeasonRef(label=label, year=year)
 
 
 def _team(t: dict[str, Any], lg: League) -> TeamRef:
@@ -441,7 +477,7 @@ def parse_scoreboard(
             GameRecord(
                 external_id=str(ev.get("uid") or f"{lg.espn_sport}:{ev['id']}"),
                 competition=competition,
-                season=season,
+                season=event_season(ev, season),
                 kickoff=kickoff,
                 home=_team(home["team"], lg),
                 away=_team(away["team"], lg),
@@ -550,8 +586,10 @@ class EspnAdapter:
     def __init__(self, fetcher: Fetcher) -> None:
         self.fetcher = fetcher
 
-    def scoreboard(self, lg: League, day: date | None, result: CollectResult) -> None:
-        url = scoreboard_url(lg, day)
+    def scoreboard(
+        self, lg: League, day: date | None, result: CollectResult, end: date | None = None
+    ) -> None:
+        url = scoreboard_url(lg, day, end)
         payload, fetched = self.fetcher.get_json(url)
         result.fetched_urls.append(url)
         result.games.extend(parse_scoreboard(payload, lg, captured_at=fetched.fetched_at))
@@ -616,8 +654,13 @@ class EspnAdapter:
         if "teams" in kinds:
             self.teams(lg, result)
         if "scoreboard" in kinds:
-            for day in days:
-                self.scoreboard(lg, day, result)
+            if len(days) > 7:
+                # backfill: one request per calendar month instead of per day
+                for start, end in month_chunks(days):
+                    self.scoreboard(lg, start, result, end=end)
+            else:
+                for day in days:
+                    self.scoreboard(lg, day, result)
         if "standings" in kinds:
             self.standings(lg, max(days) if days else date.today(), result)
         if "summary" in kinds:

@@ -5,8 +5,9 @@ import { StatusPill } from "@/components/status-pill";
 import { TeamLogo } from "@/components/team-logo";
 import { FootballBoxScore, SoccerLineup } from "@/components/player-stats";
 import { PredictionPanel } from "@/components/prediction-panel";
+import { PropsPanel } from "@/components/props-panel";
 import { STAT_HIDDEN, STAT_LABELS, STAT_ORDER, americanOdds, signed, statNumber } from "@/lib/format";
-import { gameById, gamePicks, gamePlayers, gamePredictions } from "@/lib/queries";
+import { gameById, gamePicks, gamePlayers, gamePredictions, gameProps } from "@/lib/queries";
 
 export const revalidate = 60;
 
@@ -52,10 +53,11 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const g = await gameById(Number(id));
   if (!g) notFound();
-  const [players, picks, predictions] = await Promise.all([
+  const [players, picks, predictions, props] = await Promise.all([
     gamePlayers(g.id),
     gamePicks(g.id),
     gamePredictions(g.id),
+    gameProps(g.id),
   ]);
   const awayPlayers = players.filter((p) => p.teamId === g.away.id);
   const homePlayers = players.filter((p) => p.teamId === g.home.id);
@@ -115,6 +117,7 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
       </section>
 
       <PredictionPanel rows={predictions} home={g.home} away={g.away} soccer={soccer} />
+      <PropsPanel rows={props} home={g.home} away={g.away} soccer={soccer} />
 
       {(g.homeStats.form || g.awayStats.form || g.homeStats.record || g.awayStats.record) ? (
         <section className="mt-4 grid grid-cols-2 gap-2">

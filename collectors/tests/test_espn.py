@@ -6,6 +6,8 @@ from datetime import UTC, date, datetime
 
 from gimme_collectors.sources import espn
 
+assert hasattr(espn, "SeasonRef")
+
 
 def test_season_labels(fixture):
     eng = espn.parse_scoreboard(fixture("espn/eng1-scoreboard.json"), espn.league("eng.1"))
@@ -132,6 +134,25 @@ def test_standings(fixture):
     assert cfb[0].points_for == 69 and cfb[0].wins == 2
     # CFB repeats stat names per split; the first (overall) wins
     assert cfb[0].stats["pointsFor"] == 69
+
+
+def test_event_season_in_range_responses():
+    league = espn.SeasonRef(label="2026-27", year=2026)
+    old = espn.event_season(
+        {"season": {"year": 2019, "slug": "2019-20-english-premier-league"}}, league
+    )
+    assert old.label == "2019-20" and old.year == 2019
+    mls = espn.event_season({"season": {"year": 2024, "slug": "regular-season"}}, league)
+    assert mls.label == "2024"
+    assert espn.event_season({"season": {"year": 2026}}, league) is league
+    assert espn.scoreboard_url(espn.league("eng.1"), date(2019, 8, 1), date(2019, 8, 31)).endswith(
+        "/soccer/eng.1/scoreboard?dates=20190801-20190831&limit=1000"
+    )
+    days = [date(2019, 8, 30), date(2019, 8, 31), date(2019, 9, 1), date(2019, 9, 2)]
+    assert espn.month_chunks(days) == [
+        (date(2019, 8, 30), date(2019, 8, 31)),
+        (date(2019, 9, 1), date(2019, 9, 2)),
+    ]
 
 
 def test_urls():

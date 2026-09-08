@@ -502,6 +502,85 @@ export async function gamePredictions(gameId: number): Promise<PredictionRow[]> 
   return rows.filter((r) => r.runId === latestRun);
 }
 
+export type PropRow = {
+  market: string;
+  subjectType: string;
+  subjectId: number;
+  selection: string;
+  probability: string | null;
+  mean: string | null;
+  line: string | null;
+  quantiles: unknown;
+  explanation: unknown;
+  playerName: string | null;
+  playerPosition: string | null;
+  teamId: number | null; // team the player row belongs to (from the run's explanation) or team subject
+};
+
+/** Player and team market rows for one game from the latest props run. */
+export async function gameProps(gameId: number): Promise<PropRow[]> {
+  const rows = await db()
+    .select({
+      market: prediction.market,
+      subjectType: prediction.subjectType,
+      subjectId: prediction.subjectId,
+      selection: prediction.selection,
+      probability: prediction.probability,
+      mean: prediction.mean,
+      line: prediction.line,
+      quantiles: prediction.quantiles,
+      explanation: prediction.explanation,
+      runId: prediction.modelRunId,
+      modelName: modelRun.modelName,
+      playerName: player.fullName,
+      playerPosition: player.position,
+    })
+    .from(prediction)
+    .innerJoin(modelRun, eq(prediction.modelRunId, modelRun.id))
+    .leftJoin(player, and(eq(prediction.subjectType, "player"), eq(prediction.subjectId, player.id)))
+    .where(
+      and(
+        eq(prediction.gameId, gameId),
+        inArray(modelRun.modelName, ["football-player-props", "soccer-props"]),
+      ),
+    )
+    .orderBy(desc(prediction.modelRunId));
+  const latestRun = rows[0]?.runId;
+  const latest = rows.filter((r) => r.runId === latestRun);
+  if (latest.length === 0) return [];
+  // which team each player belongs to: from roster of the two teams in this game
+  const playerIds = [...new Set(latest.filter((r) => r.subjectType === "player").map((r) => r.subjectId))];
+  const teamOf = new Map<number, number>();
+  if (playerIds.length) {
+    const g = await db()
+      .select({ home: game.homeTeamId, away: game.awayTeamId })
+      .from(game)
+      .where(eq(game.id, gameId))
+      .limit(1);
+    const teams = g[0] ? [g[0].home, g[0].away] : [];
+    const memberships = await db()
+      .select({ playerId: roster.playerId, teamId: roster.teamId, seasonId: roster.seasonId })
+      .from(roster)
+      .where(and(inArray(roster.playerId, playerIds), inArray(roster.teamId, teams)))
+      .orderBy(desc(roster.seasonId));
+    for (const m of memberships) if (!teamOf.has(m.playerId)) teamOf.set(m.playerId, m.teamId);
+  }
+  return latest.map((r) => ({
+    market: r.market,
+    subjectType: r.subjectType,
+    subjectId: r.subjectId,
+    selection: r.selection,
+    probability: r.probability,
+    mean: r.mean,
+    line: r.line,
+    quantiles: r.quantiles,
+    explanation: r.explanation,
+    playerName: r.playerName,
+    playerPosition: r.playerPosition,
+    teamId: r.subjectType === "team" ? r.subjectId : (teamOf.get(r.subjectId) ?? null),
+  }));
+}
+
 /** Favored side per game for score cards: {gameId -> {selection, probability}}. */
 export async function winProbabilities(gameIds: number[]) {
   if (gameIds.length === 0) return new Map<number, { selection: string; probability: number }>();
