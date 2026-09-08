@@ -33,6 +33,10 @@ SOCCER_DEFAULT = [
     "mex.1",
     "arg.1",
     "bra.1",
+    "uefa.champions",
+    "uefa.europa",
+    "uefa.europa.conf",
+    "conmebol.libertadores",
 ]
 FOOTBALL_DEFAULT = ["nfl", "college-football"]
 
@@ -54,6 +58,8 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = parser.add_subparsers(dest="command", required=True)
+    score = sub.add_parser("score", help="grade published predictions against results")
+    score.add_argument("--days", type=int, default=30)
     for name in ("backtest", "run"):
         p = sub.add_parser(name)
         p.add_argument("--competition", action="append", default=[], help="slug, repeatable")
@@ -276,6 +282,22 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_backtest(args)
     if args.command == "run":
         return cmd_run(args)
+    if args.command == "score":
+        cfg = settings()
+        if not cfg.database_url:
+            print("DATABASE_URL is not set.", file=sys.stderr)
+            return 2
+        from gimme_predict import score
+
+        card = score.run(cfg.database_url, days=args.days)
+        print(f"scorecard: {card['games']} games in the last {args.days} days")
+        for slug, m in sorted(card["competitions"].items()):
+            line = f"  {slug}: n={m['games']} log_loss={m['log_loss']} acc={m['accuracy']}"
+            if "market_log_loss" in m:
+                ours = m["log_loss_on_market_games"]
+                line += f" market={m['market_log_loss']} (ours on same games {ours})"
+            print(line)
+        return 0
     return 2
 
 

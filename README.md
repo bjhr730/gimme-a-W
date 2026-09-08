@@ -293,7 +293,7 @@ Never commit `.env`. Commit `.env.example` with empty values instead.
 | **4 — Game predictions** (done) | `gimme_predict`: point-in-time features (Elo, rest, form), logistic win probability + ridge spread and total for football, Dixon-Coles Poisson for soccer (1X2, total goals, team goals, both teams to score), 60/40 blend with the market, season-by-season back-test vs the closing line stored in `model_run`, daily prediction run · "Who gets the W" panel on game pages, model pick chips on score cards, `/models` page |
 | **5 — Team and player markets** (done) | Passing/rushing/receiving yards with middle-half ranges and anytime TD (usage share, opponent allowed, market game script; holdout back-test), shots on target and corners per team and per match (negative-binomial GLM with over/under lines), anytime scorer from expected-goals share · markets panel on game pages · daily run |
 | **Research search** (done) | Header search that understands teams, matchups, players, leagues and days, with keyboard navigation; `/api/search` |
-| **6 — Production** | Vercel + Neon + GitHub secrets · daily collect and predict workflows · monitoring of collector runs and model drift |
+| **6 — Production** (done) | Vercel + Neon + GitHub secrets · daily collect, fixtures, derive, predict, score and health-check workflow; weekly rosters, history refresh and back-tests · `/status` page (freshness per competition, collector and model runs) · live scorecard on `/models` grading published predictions against results · `gimme-collect health` fails the run so GitHub emails on stale data · error and loading states, security headers |
 
 ---
 

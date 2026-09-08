@@ -642,6 +642,82 @@ export async function modelRuns() {
   });
 }
 
+// ------------------------------------------------------------ phase 6
+
+/** Latest live scorecard (predictions graded against results). */
+export async function latestScorecard() {
+  const rows = await db()
+    .select({ id: modelRun.id, metrics: modelRun.metrics, startedAt: modelRun.startedAt })
+    .from(modelRun)
+    .where(and(eq(modelRun.modelName, "scorecard"), eq(modelRun.status, "succeeded")))
+    .orderBy(desc(modelRun.id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function statusSnapshot() {
+  // raw sql params must be strings for the postgres-js driver: pass ISO timestamps
+  const now = new Date().toISOString();
+  const week = new Date(Date.now() + 7 * 86_400_000).toISOString();
+  const [collectorRuns, runs, freshness, lastGame, lastPred, gameCount, predCount] = await Promise.all([
+    db().execute(sql`
+      SELECT r.id, s.slug AS source, r.adapter, r.status, r.rows_written, r.started_at, r.error
+      FROM collector_run r JOIN source s ON s.id = r.source_id
+      ORDER BY r.id DESC LIMIT 15`),
+    db()
+      .select({
+        id: modelRun.id,
+        modelName: modelRun.modelName,
+        modelVersion: modelRun.modelVersion,
+        notes: modelRun.notes,
+        snapshotCount: modelRun.snapshotCount,
+        startedAt: modelRun.startedAt,
+      })
+      .from(modelRun)
+      .orderBy(desc(modelRun.id))
+      .limit(12),
+    db().execute(sql`
+      SELECT c.slug, c.name,
+             count(g.id)::int AS games,
+             max(g.kickoff) FILTER (WHERE g.status = 'final') AS last_final,
+             count(g.id) FILTER (WHERE g.status = 'scheduled' AND g.kickoff BETWEEN ${now}::timestamptz AND ${week}::timestamptz)::int AS upcoming,
+             count(g.id) FILTER (WHERE g.status = 'scheduled' AND g.kickoff BETWEEN ${now}::timestamptz AND ${week}::timestamptz
+                 AND EXISTS (SELECT 1 FROM prediction p WHERE p.game_id = g.id
+                             AND p.market IN ('win_probability', 'match_result')))::int AS predicted
+      FROM competition c LEFT JOIN game g ON g.competition_id = c.id
+      GROUP BY c.id ORDER BY games DESC`),
+    db().select({ v: sql<Date | null>`max(${game.updatedAt})` }).from(game),
+    db().select({ v: sql<Date | null>`max(${prediction.createdAt})` }).from(prediction),
+    db().select({ v: sql<number>`count(*)::int` }).from(game),
+    db().select({ v: sql<number>`count(*)::int` }).from(prediction),
+  ]);
+  type CR = { id: number; source: string; adapter: string; status: string; rows_written: number; started_at: Date; error: string | null };
+  type FR = { slug: string; name: string; games: number; last_final: Date | null; upcoming: number; predicted: number };
+  return {
+    collectorRuns: (collectorRuns as unknown as CR[]).map((r) => ({
+      id: r.id,
+      source: r.source,
+      adapter: r.adapter,
+      status: r.status,
+      rowsWritten: r.rows_written,
+      startedAt: new Date(r.started_at),
+      error: r.error,
+    })),
+    modelRuns: runs,
+    freshness: (freshness as unknown as FR[]).map((f) => ({
+      slug: f.slug,
+      name: f.name,
+      games: f.games,
+      lastFinal: f.last_final ? new Date(f.last_final) : null,
+      upcoming: f.upcoming,
+      predicted: f.predicted,
+    })),
+    lastGameUpdate: lastGame[0]?.v ? new Date(lastGame[0].v) : null,
+    lastPrediction: lastPred[0]?.v ? new Date(lastPred[0].v) : null,
+    counts: { games: gameCount[0]?.v ?? 0, predictions: predCount[0]?.v ?? 0 },
+  };
+}
+
 export async function searchPlayers(q: string) {
   const text = q.trim();
   if (text.length < 2) return [];

@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { PageTitle } from "@/components/page-title";
-import { modelRuns } from "@/lib/queries";
+import { latestScorecard, modelRuns } from "@/lib/queries";
 
 export const revalidate = 600;
 export const metadata = { title: "Models" };
@@ -22,19 +23,67 @@ function pctDiff(model: unknown, market: unknown): string {
   return `${d > 0 ? "+" : ""}${d.toFixed(1)}% vs market`;
 }
 
+type Scorecard = {
+  window_days: number;
+  games: number;
+  competitions: Record<string, { games: number; log_loss: number; accuracy: number; market_log_loss?: number; log_loss_on_market_games?: number; market_games?: number }>;
+};
+
 export default async function ModelsPage() {
-  const runs = await modelRuns();
-  const backtests = runs.filter((r) => (r.metrics as Metrics).seasons);
-  const live = runs.filter((r) => !(r.metrics as Metrics).seasons);
+  const [runs, scorecard] = await Promise.all([modelRuns(), latestScorecard()]);
+  const backtests = runs.filter((r) => (r.metrics as Metrics).seasons && r.modelName !== "scorecard");
+  const live = runs.filter((r) => !(r.metrics as Metrics).seasons && r.modelName !== "scorecard");
+  const card = (scorecard?.metrics ?? null) as Scorecard | null;
   return (
     <>
-      <PageTitle eyebrow="Prediction engine" title="Models" />
+      <PageTitle
+        eyebrow="Prediction engine"
+        title="Models"
+        aside={<Link href="/status" className="label text-xs text-pitch">System status →</Link>}
+      />
       <p className="mb-6 max-w-[70ch] text-ink-2">
         Every model is trained only on games played before the one it predicts, then scored
         season by season against the bookmaker&apos;s closing line. Log loss is the headline
         number: lower is better, and the market is the bar to clear. Published probabilities
         blend the model with the market when a line exists.
       </p>
+
+      {card && card.games > 0 ? (
+        <section className="mb-6 rounded-md border-2 border-pitch/60 bg-surface">
+          <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-3 py-2">
+            <h2 className="display text-xl font-extrabold">Live scorecard · last {card.window_days} days</h2>
+            <span className="label text-[11px] text-muted">{card.games} graded games · what the site actually published before kickoff</span>
+          </header>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-sm">
+              <thead>
+                <tr className="border-b border-line">
+                  <th className="label px-3 py-1.5 text-left text-[11px] text-muted">Competition</th>
+                  <th className="label px-2 py-1.5 text-right text-[11px] text-muted">Games</th>
+                  <th className="label px-2 py-1.5 text-right text-[11px] text-muted">Our log loss</th>
+                  <th className="label px-2 py-1.5 text-right text-[11px] text-muted">Market</th>
+                  <th className="label px-2 py-1.5 text-right text-[11px] text-muted">Accuracy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(card.competitions)
+                  .sort((a, b) => b[1].games - a[1].games)
+                  .map(([slug, m]) => (
+                    <tr key={slug} className="border-b border-line last:border-b-0">
+                      <td className="px-3 py-1.5">{slug}</td>
+                      <td className="tnum px-2 py-1.5 text-right">{m.games}</td>
+                      <td className="tnum px-2 py-1.5 text-right">{m.log_loss.toFixed(4)}</td>
+                      <td className="tnum px-2 py-1.5 text-right text-ink-2">
+                        {m.market_log_loss !== undefined ? `${m.market_log_loss.toFixed(4)} (ours ${m.log_loss_on_market_games?.toFixed(4)})` : "no line"}
+                      </td>
+                      <td className="tnum px-2 py-1.5 text-right">{Math.round(m.accuracy * 100)}%</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       {backtests.length === 0 ? (
         <p className="text-ink-2">No back-tests recorded yet.</p>

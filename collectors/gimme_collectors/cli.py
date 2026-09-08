@@ -120,6 +120,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     derive = sub.add_parser("derive", help="recompute derived tables from collected games")
     derive.add_argument("--what", default="form,elo", help="form | elo (comma separated)")
+
+    sub.add_parser("health", help="exit 1 when the pipeline is stale or a run failed")
     return parser
 
 
@@ -314,6 +316,14 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(args)
     if args.command == "derive":
         return cmd_derive(args)
+    if args.command == "health":
+        cfg = settings()
+        if not cfg.database_url:
+            print("DATABASE_URL is not set.", file=sys.stderr)
+            return 2
+        from gimme_collectors import health
+
+        return health.main(cfg.database_url)
     return 2
 
 
