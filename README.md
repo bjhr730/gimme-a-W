@@ -4,6 +4,8 @@
 
 # gimme-a-W
 
+**Live:** https://gimme-a-w-web.vercel.app
+
 A sports prediction web app. It **collects** statistics, team and player form, betting lines and expert picks
 from public sports sites (ESPN, Sports-Reference, SI.com and structured sports APIs), then **predicts** game
 outcomes and player performance for three verticals:

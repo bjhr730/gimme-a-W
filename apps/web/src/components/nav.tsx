@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { NavLinks } from "./nav-links";
+import { ThemeToggle } from "./theme-toggle";
 
 export function Nav() {
   return (
@@ -15,12 +16,15 @@ export function Nav() {
           <nav className="ml-auto hidden md:block">
             <NavLinks variant="top" />
           </nav>
-          <Link
-            href="/search"
-            className="label ml-auto rounded border border-line-strong px-2 py-1 text-xs text-ink-2 md:ml-3"
-          >
-            Search
-          </Link>
+          <div className="ml-auto flex items-center gap-2 md:ml-3">
+            <ThemeToggle />
+            <Link
+              href="/search"
+              className="label inline-flex h-8 items-center rounded border border-line-strong px-2 text-xs text-ink-2 hover:border-pitch hover:text-pitch"
+            >
+              Search
+            </Link>
+          </div>
         </div>
       </header>
       <nav

@@ -36,10 +36,14 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Runs before first paint so a pinned theme never flashes the other one.
+const applySavedTheme = `try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable}`}>
+    <html lang="en" className={`${display.variable} ${body.variable}`} suppressHydrationWarning>
       <body>
+        <script dangerouslySetInnerHTML={{ __html: applySavedTheme }} />
         <Nav />
         <main className="mx-auto w-full max-w-5xl px-3 pt-3 sm:px-5 sm:pt-5">{children}</main>
       </body>

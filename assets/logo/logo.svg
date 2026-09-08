@@ -28,14 +28,11 @@
     <!-- Eye -->
     <circle cx="660" cy="262" r="19" fill="#0E1A1E"/>
     <circle cx="666" cy="255" r="6" fill="#FFFFFF"/>
-    <!-- Chirp arcs -->
-    <path d="M900 205 C 915 220, 918 245, 905 265" fill="none" stroke="#9AA6AE" stroke-width="7" stroke-linecap="round"/>
-    <path d="M930 190 C 955 212, 960 250, 940 280" fill="none" stroke="#B6C0C6" stroke-width="7" stroke-linecap="round"/>
-    <!-- Dollar signs -->
+    <!-- Dollar signs, rising from the beak -->
     <g fill="#D9A23A" font-family="DejaVu Sans, Verdana, Arial, sans-serif" font-weight="700">
-      <text x="975" y="200" font-size="92">$</text>
-      <text x="1120" y="110" font-size="130">$</text>
-      <text x="1275" y="20" font-size="170">$</text>
+      <text x="895" y="230" font-size="118">$</text>
+      <text x="1025" y="140" font-size="162">$</text>
+      <text x="1172" y="45" font-size="212">$</text>
     </g>
   </g>
   <!-- Wordmark -->

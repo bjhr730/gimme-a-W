@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 820" width="1300" height="820" role="img" aria-label="gimme-a-W bird mark">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 820" width="1320" height="820" role="img" aria-label="gimme-a-W bird mark">
   <g transform="translate(0 150)">
     <!-- Back wing -->
     <path d="M95 200 C 170 175, 260 178, 340 210 C 400 236, 450 290, 470 335 L 480 350 C 420 352, 350 330, 290 300 C 210 260, 150 232, 95 200 Z" fill="#1E6070"/>
@@ -23,14 +23,11 @@
     <!-- Eye -->
     <circle cx="660" cy="262" r="19" fill="#0E1A1E"/>
     <circle cx="666" cy="255" r="6" fill="#FFFFFF"/>
-    <!-- Chirp arcs -->
-    <path d="M900 205 C 915 220, 918 245, 905 265" fill="none" stroke="#9AA6AE" stroke-width="7" stroke-linecap="round"/>
-    <path d="M930 190 C 955 212, 960 250, 940 280" fill="none" stroke="#B6C0C6" stroke-width="7" stroke-linecap="round"/>
-    <!-- Dollar signs -->
+    <!-- Dollar signs, rising from the beak -->
     <g fill="#D9A23A" font-family="DejaVu Sans, Verdana, Arial, sans-serif" font-weight="700">
-      <text x="975" y="200" font-size="92">$</text>
-      <text x="1120" y="110" font-size="130">$</text>
-      <text x="1275" y="20" font-size="170">$</text>
+      <text x="895" y="230" font-size="118">$</text>
+      <text x="1025" y="140" font-size="162">$</text>
+      <text x="1172" y="45" font-size="212">$</text>
     </g>
   </g>
 </svg>

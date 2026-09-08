@@ -1,39 +1,33 @@
 @import "tailwindcss";
 
-/* Design tokens. Light is the default; dark follows the OS. */
+/*
+ * Design tokens. Each token carries its light and dark value; which one applies
+ * follows `color-scheme`. By default that follows the OS, and the header toggle
+ * pins it by setting data-theme="light" | "dark" on <html>.
+ */
 :root {
-  --ground: #f2f4f0;
-  --surface: #ffffff;
-  --surface-2: #e9ede8;
-  --ink: #14211a;
-  --ink-2: #4b5a51;
-  --muted: #7c8a81;
-  --line: #d3dad3;
-  --line-strong: #aeb9b0;
-  --pitch: #1d7a46;
-  --pitch-soft: #dff0e5;
-  --leather: #b5581c;
-  --leather-soft: #f6e6d9;
-  --live: #c9302c;
   color-scheme: light dark;
+  --ground: light-dark(#f2f4f0, #0f1613);
+  --surface: light-dark(#ffffff, #171f1a);
+  --surface-2: light-dark(#e9ede8, #1f2a23);
+  --ink: light-dark(#14211a, #e6ebe6);
+  --ink-2: light-dark(#4b5a51, #b4c0b7);
+  --muted: light-dark(#7c8a81, #7f8f85);
+  --line: light-dark(#d3dad3, #2a3630);
+  --line-strong: light-dark(#aeb9b0, #3c4b42);
+  --pitch: light-dark(#1d7a46, #3fb26f);
+  --pitch-soft: light-dark(#dff0e5, #163523);
+  --leather: light-dark(#b5581c, #e0813f);
+  --leather-soft: light-dark(#f6e6d9, #3a2415);
+  --live: light-dark(#c9302c, #ff6b66);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ground: #0f1613;
-    --surface: #171f1a;
-    --surface-2: #1f2a23;
-    --ink: #e6ebe6;
-    --ink-2: #b4c0b7;
-    --muted: #7f8f85;
-    --line: #2a3630;
-    --line-strong: #3c4b42;
-    --pitch: #3fb26f;
-    --pitch-soft: #163523;
-    --leather: #e0813f;
-    --leather-soft: #3a2415;
-    --live: #ff6b66;
-  }
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 @theme inline {
