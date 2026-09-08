@@ -11,6 +11,7 @@ gimme-collect derive --what form,elo
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 import traceback
 from collections.abc import Iterator
@@ -314,7 +315,23 @@ def cmd_derive(args: argparse.Namespace) -> int:
     return 0
 
 
+def _use_utf8_output() -> None:
+    """Never let an unprintable name kill a run.
+
+    Console encodings outside UTF-8 (cp1252 on Windows) raise on characters like
+    the c-acute in a Croatian surname. That exception used to abort the command
+    before any prediction was written, so a player's name decided whether a
+    league got published.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            with contextlib.suppress(ValueError, OSError):
+                reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _use_utf8_output()
     args = _build_parser().parse_args(argv)
     if args.command == "leagues":
         return cmd_leagues()
