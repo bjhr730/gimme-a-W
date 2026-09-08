@@ -61,6 +61,12 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     score = sub.add_parser("score", help="grade published predictions against results")
     score.add_argument("--days", type=int, default=30)
+    prune = sub.add_parser(
+        "prune", help="drop predictions a newer run has superseded, keeping what the site reads"
+    )
+    prune.add_argument(
+        "--dry-run", action="store_true", help="report how many rows would go, delete nothing"
+    )
     for name in ("backtest", "run"):
         p = sub.add_parser(name)
         p.add_argument("--competition", action="append", default=[], help="slug, repeatable")
@@ -310,6 +316,16 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_backtest(args)
     if args.command == "run":
         return cmd_run(args)
+    if args.command == "prune":
+        cfg = settings()
+        if not cfg.database_url:
+            print("DATABASE_URL is not set.", file=sys.stderr)
+            return 2
+        from gimme_predict import prune as prune_module
+
+        result = prune_module.run(cfg.database_url, dry_run=args.dry_run)
+        print(", ".join(f"{k}={v}" for k, v in result.items()))
+        return 0
     if args.command == "score":
         cfg = settings()
         if not cfg.database_url:

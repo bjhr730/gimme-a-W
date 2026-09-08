@@ -68,6 +68,11 @@ jobs:
       - name: Grade published predictions against results (last 30 days)
         if: always()
         run: uv run gimme-predict score --days 30
+      # Each pass writes a complete fresh set of predictions. Without this the old
+      # ones accumulated at about 70 MB a day and refilled the 512 MB project.
+      - name: Drop predictions a newer run has superseded
+        if: always()
+        run: uv run gimme-predict prune
       - name: Health check (fails the run, and emails you, when data stops flowing)
         if: always()
         run: uv run gimme-collect health
