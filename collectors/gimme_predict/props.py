@@ -222,7 +222,10 @@ def predict_soccer(
                 (sum(h.goals) / len(h.goals)) if h and h.goals else 1.4,
                 (sum(a.goals) / len(a.goals)) if a and a.goals else 1.1,
             )
-    player_rows = load_player_games(conn, slug)
+    # Player form follows the club, not the competition: a cup tie in September
+    # has no history of its own, while the clubs in it have played a league month.
+    squad_ids = sorted({t for g in upcoming for t in (g.home_id, g.away_id)})
+    player_rows = load_player_games(conn, team_ids=squad_ids)
     if player_rows:
         threat = soccer_props.player_threat(player_rows)
         team_games: dict[int, list[int]] = defaultdict(list)

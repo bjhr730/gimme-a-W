@@ -35,10 +35,31 @@ class PlayerGame:
     stats: dict[str, Any]
 
 
-def load_player_games(conn: psycopg.Connection[Any], competition_slug: str) -> list[PlayerGame]:
+def load_player_games(
+    conn: psycopg.Connection[Any],
+    competition_slug: str | None = None,
+    team_ids: list[int] | None = None,
+) -> list[PlayerGame]:
+    """Per-player box-score rows in kickoff order, for one competition or one set of clubs.
+
+    Passing `team_ids` reads a club's players across every competition it plays
+    in. That is what a cup tie needs: the Champions League has no season of its
+    own on record in September, while the clubs in it have played a league month
+    already, and a striker's rate does not reset when he plays in Europe.
+    """
+    if not competition_slug and not team_ids:
+        raise ValueError("pass a competition slug or a list of team ids")
+    where = ["g.status = 'final'"]
+    params: list[Any] = []
+    if competition_slug:
+        where.append("c.slug = %s")
+        params.append(competition_slug)
+    if team_ids:
+        where.append("s.team_id = ANY(%s)")
+        params.append(list(team_ids))
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
-            """
+            f"""
             SELECT s.game_id, g.kickoff, g.season_id, s.team_id,
                    CASE WHEN s.team_id = g.home_team_id THEN g.away_team_id
                         ELSE g.home_team_id END AS opp_id,
@@ -48,10 +69,10 @@ def load_player_games(conn: psycopg.Connection[Any], competition_slug: str) -> l
             JOIN game g ON g.id = s.game_id
             JOIN competition c ON c.id = g.competition_id
             JOIN player p ON p.id = s.player_id
-            WHERE c.slug = %s AND g.status = 'final'
+            WHERE {" AND ".join(where)}
             ORDER BY g.kickoff, g.id, s.player_id
             """,
-            (competition_slug,),
+            params,
         )
         return [
             PlayerGame(
