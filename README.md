@@ -127,12 +127,35 @@ collected data, and every model is measured against the bookmaker line as the ba
 | **Match result** (home / draw / away) | Soccer | Three probabilities | Dixon-Coles bivariate Poisson on team attack/defense strengths, time-decayed, blended with bookmaker implied probabilities |
 | **Win probability** and spread | NFL, CFB | Home win probability, expected margin | Elo with margin of victory + LightGBM on efficiency features (EPA per play, success rate, rest days, injuries), calibrated against closing lines |
 | **Total goals** | Soccer | Expected goals per team, over/under probabilities for 1.5 / 2.5 / 3.5 | Same Poisson strengths as match result; xG-adjusted |
-| **Anytime goalscorer** | Soccer | Probability per player | Player's xG per 90 × expected minutes × share of team's expected goals; Poisson |
+| **Anytime goalscorer** | Soccer | Probability and expected goals per player | Share of the team's expected goals, from the player's recent goals and shots per appearance and the minutes they are likely to play; Poisson |
+| **Anytime assist** | Soccer | Probability and expected assists per player | The team's expected goals scaled by the share that are assisted, split by a player's assist share shrunk toward their share of minutes |
+| **Player shots on target** | Soccer | Expected count per player, 1+ and 2+ probabilities | Share of the team's expected shots on target, from the player's recent rate per appearance; Poisson |
 | **Shots on target** | Soccer | Expected count per team, over/under lines | Negative-binomial regression on team and opponent rates, home advantage, game state |
 | **Total corners** | Soccer | Expected count, over/under lines | Negative-binomial regression on team corner rates for and against, possession, tempo |
 | **Anytime touchdown scorer** | NFL, CFB | Probability per player | Red-zone target and carry share × team expected touchdowns; Poisson |
 | **Passing / rushing / receiving yards** | NFL, CFB | Expected yards per player with 25th–75th percentile range | LightGBM quantile regression on usage (target share, carries, snap %), opponent defense EPA allowed, expected game script (spread, total), weather |
 | **Total points** | NFL, CFB | Expected total, over/under probability | Team pace and efficiency features, calibrated against the closing total |
+| **Parlay of the day** | All | 2 to 20 legs with a combined probability and fair price | The most likely published call in each of the day's games, one leg per game so correlated legs are not multiplied together |
+
+Two corrections keep player markets honest early in a season, when a squad has
+played two or three games. Per-appearance rates are shrunk toward the squad
+average, so one goal in one appearance is not read as a goal a game. Shares are
+diluted when only part of a squad has appeared, so the players on record do not
+split a total that belongs to the whole team.
+
+### Availability
+
+`player_status` holds one current report per player per source: the source's own
+wording ("Questionable", "Injured Reserve"), a normalized verdict, and the share
+of games players carrying that verdict have historically been active for. ESPN
+publishes a full report for the NFL, a thin one for college football, and none
+for soccer, so a player with no row means *no report* and never *fit*.
+
+The prop models act on it. A player reported out is left out of the markets
+entirely: publishing 68 rushing yards for a player on injured reserve is worse
+than publishing nothing. A doubt keeps their projection, which is conditional on
+them taking the field, but has the probability markets scaled by their chance of
+playing. Each run records how many players it withheld and flagged.
 
 ### How a prediction is produced
 
@@ -293,6 +316,7 @@ Never commit `.env`. Commit `.env.example` with empty values instead.
 | **4 — Game predictions** (done) | `gimme_predict`: point-in-time features (Elo, rest, form), logistic win probability + ridge spread and total for football, Dixon-Coles Poisson for soccer (1X2, total goals, team goals, both teams to score), 60/40 blend with the market, season-by-season back-test vs the closing line stored in `model_run`, daily prediction run · "Who gets the W" panel on game pages, model pick chips on score cards, `/models` page |
 | **5 — Team and player markets** (done) | Passing/rushing/receiving yards with middle-half ranges and anytime TD (usage share, opponent allowed, market game script; holdout back-test), shots on target and corners per team and per match (negative-binomial GLM with over/under lines), anytime scorer from expected-goals share · markets panel on game pages · daily run |
 | **Research search** (done) | Header search that understands teams, matchups, players, leagues and days, with keyboard navigation; `/api/search` |
+| **7 — Availability and parlays** (done) | ESPN injury feed (`--kind injuries`, in the daily run) into `player_status` · prop models withhold players reported out and scale probability markets for doubts · availability shown on game, team and player pages and as badges on market rows · soccer goals, assists and shots on target per player with expected quantities, shrunk rates and squad-coverage dilution · `/parlay` page, 2 to 20 legs, one per game · mobile back button · daily job re-reads the last three weeks so a missed run cannot leave a gap in the season |
 | **6 — Production** (done) | Vercel + Neon + GitHub secrets · daily collect, fixtures, derive, predict, score and health-check workflow; weekly rosters, history refresh and back-tests · `/status` page (freshness per competition, collector and model runs) · live scorecard on `/models` grading published predictions against results · `gimme-collect health` fails the run so GitHub emails on stale data · error and loading states, security headers |
 
 ---

@@ -12,6 +12,13 @@ Python package with two parts:
 uv sync
 uv run gimme-collect leagues
 uv run gimme-collect run espn --kind all --league nfl --league eng.1 --date today --dry-run
+
+# injury and availability reports: one request per league
+# (ESPN has a full NFL feed, a thin college one, and nothing for soccer)
+uv run gimme-collect run espn --kind injuries --league nfl --league college-football
+
+# backfill lineups for a whole season: month-sized range requests, played games only
+uv run gimme-collect run espn --kind summary --league eng.1 --date 2026-01-01 --days 255
 uv run gimme-collect run espn --kind scoreboard --league college-football --date 2026-09-06 --json --dry-run
 ```
 
