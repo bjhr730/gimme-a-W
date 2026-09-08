@@ -13,7 +13,8 @@ phones, top nav from 768px. Installable as a PWA.
 | `/teams/[id]` | Elo, last-5 form, table positions, upcoming games, recent results, roster |
 | `/players/[id]` | Player card and game log (passing/rushing/receiving or goals/shots per game) |
 | `/standings/[slug]` | Latest table snapshot, grouped by conference/division when present |
-| `/search?q=` | Team and player search |
+| `/search` and the header box (`/` key) | Understands teams, matchups ("arsenal chelsea"), players, leagues ("premier league table") and days ("nfl sunday", "tomorrow"); backed by `/api/search` |
+| `/models` | Back-tests per model and competition, latest prediction runs |
 
 Game pages also show per-player box scores (football) or lineups with goals and shots
 (soccer), plus ESPN FPI picks when ESPN publishes one.
