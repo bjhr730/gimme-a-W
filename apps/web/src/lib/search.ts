@@ -12,6 +12,7 @@
  * Pure functions over the same queries the pages use; no LLM involved.
  */
 
+import type { AnyColumn } from "drizzle-orm";
 import { and, asc, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { competition, game, player, team } from "@gimme/db";
@@ -20,6 +21,17 @@ import { SPORTS_TZ, addDays, todayIso } from "./format";
 
 const home = alias(team, "sh");
 const away = alias(team, "sa");
+
+
+/**
+ * Case- and accent-insensitive contains, so "almiron" finds "Almirón" and
+ * "sao paulo" finds "São Paulo". Names across these leagues carry accents that
+ * nobody types, and a plain ILIKE misses every one of them.
+ */
+function loose(column: AnyColumn, text: string, position: "anywhere" | "start" = "anywhere") {
+  const pattern = position === "start" ? `${text}%` : `%${text}%`;
+  return sql`unaccent(${column}) ilike unaccent(${pattern})`;
+}
 
 export type SearchGame = {
   id: number;
@@ -190,12 +202,12 @@ export async function runSearch(rawQuery: string): Promise<SearchResult> {
       .from(team)
       .where(
         or(
-          ilike(team.name, `%${whole}%`),
-          ilike(team.location, `%${whole}%`),
+          loose(team.name, whole),
+          loose(team.location, whole),
           ...teamTokens.flatMap((t) => [
-            ilike(team.name, `%${t}%`),
-            ilike(team.shortName, `%${t}%`),
-            ilike(team.location, `${t}%`),
+            loose(team.name, t),
+            loose(team.shortName, t),
+            loose(team.location, t, "start"),
             ilike(team.abbreviation, t),
           ]),
         ),
@@ -247,7 +259,7 @@ export async function runSearch(rawQuery: string): Promise<SearchResult> {
     players = await db()
       .select({ id: player.id, fullName: player.fullName, position: player.position, headshotUrl: player.headshotUrl, sportId: player.sportId })
       .from(player)
-      .where(or(ilike(player.fullName, `%${whole}%`), ...(teamTokens.length === 1 ? [] : teamTokens.map((t) => ilike(player.fullName, `% ${t}%`)))))
+      .where(or(loose(player.fullName, whole), ...(teamTokens.length === 1 ? [] : teamTokens.map((t) => loose(player.fullName, ` ${t}`)))))
       .orderBy(asc(player.fullName))
       .limit(6);
   }

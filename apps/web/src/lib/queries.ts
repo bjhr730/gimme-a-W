@@ -922,7 +922,7 @@ export async function searchPlayers(q: string) {
   return db()
     .select({ ...playerCols, sportId: player.sportId })
     .from(player)
-    .where(ilike(player.fullName, `%${text}%`))
+    .where(sql`unaccent(${player.fullName}) ilike unaccent(${`%${text}%`})`)
     .orderBy(asc(player.fullName))
     .limit(20);
 }
@@ -942,8 +942,8 @@ export async function searchTeams(q: string) {
     .from(team)
     .where(
       or(
-        ilike(team.name, `%${text}%`),
-        ilike(team.location, `%${text}%`),
+        sql`unaccent(${team.name}) ilike unaccent(${`%${text}%`})`,
+        sql`unaccent(${team.location}) ilike unaccent(${`%${text}%`})`,
         ilike(team.abbreviation, `${text}%`),
       ),
     )
