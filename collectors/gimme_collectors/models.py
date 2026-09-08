@@ -40,6 +40,9 @@ class TeamRef(BaseModel):
     logo_url: str | None = None
     color: str | None = None
     alt_color: str | None = None
+    # True for sources that only know a team name (football-data.co.uk): the writer
+    # resolves it to an existing team in the competition instead of creating one.
+    match_by_name: bool = False
 
 
 class PlayerRef(BaseModel):
@@ -71,6 +74,7 @@ class OddsRecord(BaseModel):
     line: float | None = None
     price: float | None = None  # decimal odds
     captured_at: datetime
+    is_closing: bool = False
 
 
 class GameRecord(BaseModel):

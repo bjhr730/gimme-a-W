@@ -158,18 +158,26 @@ export async function gameById(id: number) {
       .orderBy(desc(odds.capturedAt)),
   ]);
 
-  // Latest line per bookmaker/market/selection.
+  // Latest line per bookmaker/market/selection, then one bookmaker for the page:
+  // the first in preference order that has any line for this game.
   const latest = new Map<string, (typeof oddsRows)[number]>();
   for (const o of oddsRows) {
     const key = `${o.bookmaker}|${o.market}|${o.selection}`;
     if (!latest.has(key)) latest.set(key, o);
   }
+  const all = [...latest.values()];
+  const preference = ["DraftKings", "Pinnacle", "Bet365", "consensus"];
+  const books = [...new Set(all.map((o) => o.bookmaker))].sort(
+    (a, b) => (preference.indexOf(a) + 99) % 99 - ((preference.indexOf(b) + 99) % 99),
+  );
+  const chosen = books[0];
 
   return {
     ...g,
     homeStats: (stats.find((s) => s.teamId === g.home.id)?.stats ?? {}) as Record<string, unknown>,
     awayStats: (stats.find((s) => s.teamId === g.away.id)?.stats ?? {}) as Record<string, unknown>,
-    odds: [...latest.values()],
+    odds: chosen ? all.filter((o) => o.bookmaker === chosen) : [],
+    otherBooks: books.slice(1),
   };
 }
 

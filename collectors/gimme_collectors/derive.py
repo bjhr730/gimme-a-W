@@ -162,9 +162,17 @@ def compute_elo(conn: psycopg.Connection[Any], *, as_of: date | None = None) -> 
     rating: dict[int, float] = defaultdict(lambda: 1500.0)
     games_played: dict[int, int] = defaultdict(int)
     sport_of: dict[int, str] = {}
+    last_season: dict[int, int] = {}
 
     for g in games:
         params = ELO[g.sport]
+        # New season: regress a third of the way back to the mean, so last year's
+        # strength carries over without locking it in (rosters and coaches change).
+        for team_id in (g.home_id, g.away_id):
+            previous = last_season.get(team_id)
+            if previous is not None and previous != g.season_id:
+                rating[team_id] = rating[team_id] * (2 / 3) + 1500.0 / 3
+            last_season[team_id] = g.season_id
         home, away = rating[g.home_id], rating[g.away_id]
         diff = home + params["home"] - away
         exp_home = _expected(diff)

@@ -178,7 +178,12 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
       {g.odds.length > 0 ? (
         <section className="mt-4 rounded-md border border-line bg-surface">
           <h2 className="label flex items-center justify-between border-b border-line px-3 py-1.5 text-xs text-ink-2">
-            <span>Lines · {g.odds[0].bookmaker}</span>
+            <span>
+              {g.odds[0].is_closing ? "Closing lines" : "Lines"} · {g.odds[0].bookmaker}
+              {g.otherBooks.length ? (
+                <span className="text-muted"> · also {g.otherBooks.join(", ")}</span>
+              ) : null}
+            </span>
             <span className="text-muted">
               <LocalTime iso={g.odds[0].capturedAt.toISOString()} mode="datetime" />
             </span>

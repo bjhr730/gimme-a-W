@@ -26,10 +26,15 @@ from gimme_collectors.models import (
     VenueRef,
 )
 from gimme_collectors.pipeline.fetch import FetchResult
+from gimme_collectors.pipeline.teamnames import match_team
 
 SPORTS = {"soccer": "Soccer", "american_football": "American football"}
 
 Cursor = psycopg.Cursor[dict[str, Any]]
+
+
+class UnmatchedTeam(Exception):
+    """A name-only team reference could not be matched to an existing team."""
 
 
 def _id(cur: Cursor) -> int:
@@ -54,7 +59,16 @@ class Writer:
             source_slug, source_name, base_url, rate_limit_per_min
         )
         self.rows_written = 0
+        self.unmatched: dict[str, int] = {}  # team name -> times skipped
         self._id_cache: dict[tuple[str, str], int] = {}
+        # Per-run memo so bulk loads (thousands of rows naming the same teams, players,
+        # seasons and rosters) touch each reference row once.
+        self._competitions: dict[str, int] = {}
+        self._seasons: dict[tuple[int, str], int] = {}
+        self._teams_refreshed: set[int] = set()
+        self._players_refreshed: set[int] = set()
+        self._rosters_seen: set[tuple[int, int, int]] = set()
+        self._venues: dict[str, int] = {}
 
     # ------------------------------------------------------------ plumbing
 
@@ -167,6 +181,9 @@ class Writer:
     # ----------------------------------------------------------- reference
 
     def upsert_competition(self, cur: Cursor, c: CompetitionRef) -> int:
+        cached = self._competitions.get(c.slug)
+        if cached is not None:
+            return cached
         cur.execute(
             """
             INSERT INTO competition (sport_id, slug, name, short_name, country, level)
@@ -179,9 +196,13 @@ class Writer:
             """,
             (c.sport, c.slug, c.name, c.short_name, c.country, c.level),
         )
-        return _id(cur)
+        self._competitions[c.slug] = _id(cur)
+        return self._competitions[c.slug]
 
     def upsert_season(self, cur: Cursor, competition_id: int, s: SeasonRef) -> int:
+        cached = self._seasons.get((competition_id, s.label))
+        if cached is not None:
+            return cached
         cur.execute(
             """
             INSERT INTO season (competition_id, label, year, start_date, end_date)
@@ -193,10 +214,41 @@ class Writer:
             """,
             (competition_id, s.label, s.year, s.start_date, s.end_date),
         )
-        return _id(cur)
+        self._seasons[(competition_id, s.label)] = _id(cur)
+        return self._seasons[(competition_id, s.label)]
+
+    def resolve_team_by_name(self, cur: Cursor, competition_id: int, t: TeamRef) -> int:
+        """Match a name-only TeamRef to a team already in the competition, then bind
+        the source id to it so the next run is a plain lookup."""
+        team_id = self._lookup_external(cur, "team", t.external_id)
+        if team_id is not None:
+            return team_id
+        cur.execute(
+            """
+            SELECT DISTINCT t.id, t.name, t.short_name, t.location
+            FROM team t
+            JOIN team_season ts ON ts.team_id = t.id
+            JOIN season s ON s.id = ts.season_id
+            WHERE s.competition_id = %s
+            """,
+            (competition_id,),
+        )
+        candidates: dict[str, int] = {}
+        for row in cur.fetchall():
+            for name in (row["name"], row["short_name"], row["location"]):
+                if name:
+                    candidates.setdefault(str(name), int(row["id"]))
+        team_id = match_team(t.name, candidates)
+        if team_id is None:
+            self.unmatched[t.name] = self.unmatched.get(t.name, 0) + 1
+            raise UnmatchedTeam(t.name)
+        self._bind_external(cur, "team", team_id, t.external_id)
+        return team_id
 
     def upsert_team(self, cur: Cursor, sport: str, t: TeamRef) -> int:
         team_id = self._lookup_external(cur, "team", t.external_id)
+        if team_id is None and t.match_by_name:
+            raise UnmatchedTeam(t.name)  # must go through resolve_team_by_name
         if team_id is None:
             cur.execute(
                 """
@@ -217,8 +269,10 @@ class Writer:
             )
             team_id = _id(cur)
             self._bind_external(cur, "team", team_id, t.external_id)
+            self._teams_refreshed.add(team_id)
             self.rows_written += 1
-        else:
+        elif team_id not in self._teams_refreshed:
+            self._teams_refreshed.add(team_id)
             cur.execute(
                 """
                 UPDATE team SET name = %s, short_name = COALESCE(%s, short_name),
@@ -243,6 +297,10 @@ class Writer:
     def upsert_team_season(
         self, cur: Cursor, team_id: int, season_id: int, group_name: str | None
     ) -> None:
+        key = (team_id, season_id, 0)
+        if key in self._rosters_seen and group_name is None:
+            return
+        self._rosters_seen.add(key)
         cur.execute(
             """
             INSERT INTO team_season (team_id, season_id, group_name) VALUES (%s, %s, %s)
@@ -257,28 +315,67 @@ class Writer:
             venue_id = self._lookup_external(cur, "venue", v.external_id)
             if venue_id is not None:
                 return venue_id
-        cur.execute(
-            "INSERT INTO venue (name, city, state, country, indoor) "
-            "VALUES (%s, %s, %s, %s, %s) RETURNING id",
-            (v.name, v.city, v.state, v.country, v.indoor),
-        )
-        venue_id = _id(cur)
+        # Sources without venue ids (nflverse) name the stadium: reuse by name.
+        cached = self._venues.get(v.name.lower())
+        if cached is not None:
+            if v.external_id:
+                self._bind_external(cur, "venue", cached, v.external_id)
+            return cached
+        cur.execute("SELECT id FROM venue WHERE lower(name) = lower(%s) LIMIT 1", (v.name,))
+        row = cur.fetchone()
+        if row is not None:
+            venue_id = int(row["id"])
+        else:
+            cur.execute(
+                "INSERT INTO venue (name, city, state, country, indoor) "
+                "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (v.name, v.city, v.state, v.country, v.indoor),
+            )
+            venue_id = _id(cur)
+        self._venues[v.name.lower()] = venue_id
         if v.external_id:
             self._bind_external(cur, "venue", venue_id, v.external_id)
         return venue_id
 
     # --------------------------------------------------------------- games
 
+    def find_game(
+        self, cur: Cursor, season_id: int, home_id: int, away_id: int, kickoff: Any
+    ) -> int | None:
+        """The same fixture from another source: same season and teams, kickoff within
+        36 hours (sources disagree on time zones and TBD kickoffs)."""
+        cur.execute(
+            """
+            SELECT id FROM game
+            WHERE season_id = %s AND home_team_id = %s AND away_team_id = %s
+              AND kickoff BETWEEN %s::timestamptz - interval '36 hours'
+                              AND %s::timestamptz + interval '36 hours'
+            ORDER BY abs(extract(epoch FROM (kickoff - %s::timestamptz))) LIMIT 1
+            """,
+            (season_id, home_id, away_id, kickoff, kickoff, kickoff),
+        )
+        row = cur.fetchone()
+        return int(row["id"]) if row else None
+
+    def _team_for_game(self, cur: Cursor, competition_id: int, sport: str, t: TeamRef) -> int:
+        if t.match_by_name:
+            return self.resolve_team_by_name(cur, competition_id, t)
+        return self.upsert_team(cur, sport, t)
+
     def upsert_game(self, cur: Cursor, g: GameRecord) -> int:
         competition_id = self.upsert_competition(cur, g.competition)
         season_id = self.upsert_season(cur, competition_id, g.season)
-        home_id = self.upsert_team(cur, g.competition.sport, g.home)
-        away_id = self.upsert_team(cur, g.competition.sport, g.away)
+        home_id = self._team_for_game(cur, competition_id, g.competition.sport, g.home)
+        away_id = self._team_for_game(cur, competition_id, g.competition.sport, g.away)
         self.upsert_team_season(cur, home_id, season_id, None)
         self.upsert_team_season(cur, away_id, season_id, None)
         venue_id = self.upsert_venue(cur, g.venue) if g.venue else None
 
         game_id = self._lookup_external(cur, "game", g.external_id)
+        if game_id is None:
+            game_id = self.find_game(cur, season_id, home_id, away_id, g.kickoff)
+            if game_id is not None:
+                self._bind_external(cur, "game", game_id, g.external_id)
         params = (
             competition_id,
             season_id,
@@ -320,17 +417,40 @@ class Writer:
             game_id = _id(cur)
             self._bind_external(cur, "game", game_id, g.external_id)
         else:
+            # Another source's copy of a known game: fill gaps, never blank out
+            # details the first source had (scores, venue, weather, week).
             cur.execute(
                 """
-                UPDATE game SET competition_id = %s, season_id = %s, kickoff = %s,
-                    home_team_id = %s, away_team_id = %s, venue_id = COALESCE(%s, venue_id),
-                    home_score = %s, away_score = %s, status = %s, status_detail = %s,
-                    period = %s, clock = %s, week = %s, round = %s, neutral_site = %s,
-                    conference_game = %s, attendance = COALESCE(%s, attendance), weather = %s,
+                UPDATE game SET
+                    venue_id = COALESCE(venue_id, %s),
+                    home_score = COALESCE(%s, home_score), away_score = COALESCE(%s, away_score),
+                    status = CASE WHEN status IN ('scheduled', 'in_progress') THEN %s
+                                  ELSE status END,
+                    status_detail = COALESCE(status_detail, %s),
+                    period = COALESCE(%s, period), clock = COALESCE(%s, clock),
+                    week = COALESCE(week, %s), round = COALESCE(round, %s),
+                    neutral_site = neutral_site OR %s,
+                    conference_game = COALESCE(conference_game, %s),
+                    attendance = COALESCE(attendance, %s), weather = weather || %s,
                     updated_at = now()
                 WHERE id = %s
                 """,
-                (*params, game_id),
+                (
+                    venue_id,
+                    g.home_score,
+                    g.away_score,
+                    g.status,
+                    g.status_detail,
+                    g.period,
+                    g.clock,
+                    g.week,
+                    g.round,
+                    g.neutral_site,
+                    g.conference_game,
+                    g.attendance,
+                    Jsonb(g.weather),
+                    game_id,
+                ),
             )
         self.rows_written += 1
 
@@ -350,8 +470,8 @@ class Writer:
             cur.execute(
                 """
                 INSERT INTO odds (game_id, source_id, bookmaker, market, selection, line, price,
-                                  captured_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                  captured_at, is_closing)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (game_id, bookmaker, market, selection, captured_at) DO NOTHING
                 """,
                 (
@@ -363,6 +483,7 @@ class Writer:
                     o.line,
                     o.price,
                     o.captured_at,
+                    o.is_closing,
                 ),
             )
             self.rows_written += cur.rowcount
@@ -411,8 +532,38 @@ class Writer:
 
     # ------------------------------------------------------------- players
 
-    def upsert_player(self, cur: Cursor, sport: str, p: PlayerRef) -> int:
+    def _player_by_name(
+        self, cur: Cursor, sport: str, p: PlayerRef, team_id: int | None
+    ) -> int | None:
+        """Second source for a player we already know: same full name on the same
+        team's roster (or, failing that, unique in the sport)."""
+        if team_id is not None:
+            cur.execute(
+                """
+                SELECT p.id FROM player p JOIN roster r ON r.player_id = p.id
+                WHERE r.team_id = %s AND lower(p.full_name) = lower(%s) AND p.sport_id = %s
+                LIMIT 2
+                """,
+                (team_id, p.full_name, sport),
+            )
+            rows = cur.fetchall()
+            if len(rows) == 1:
+                return int(rows[0]["id"])
+        cur.execute(
+            "SELECT id FROM player WHERE sport_id = %s AND lower(full_name) = lower(%s) LIMIT 2",
+            (sport, p.full_name),
+        )
+        rows = cur.fetchall()
+        return int(rows[0]["id"]) if len(rows) == 1 else None
+
+    def upsert_player(
+        self, cur: Cursor, sport: str, p: PlayerRef, team_id: int | None = None
+    ) -> int:
         player_id = self._lookup_external(cur, "player", p.external_id)
+        if player_id is None:
+            player_id = self._player_by_name(cur, sport, p, team_id)
+            if player_id is not None:
+                self._bind_external(cur, "player", player_id, p.external_id)
         if player_id is None:
             cur.execute(
                 """
@@ -434,8 +585,10 @@ class Writer:
             )
             player_id = _id(cur)
             self._bind_external(cur, "player", player_id, p.external_id)
+            self._players_refreshed.add(player_id)
             self.rows_written += 1
-        else:
+        elif player_id not in self._players_refreshed:
+            self._players_refreshed.add(player_id)
             cur.execute(
                 """
                 UPDATE player SET full_name = %s, short_name = COALESCE(%s, short_name),
@@ -468,6 +621,10 @@ class Writer:
         jersey: str | None,
         position: str | None,
     ) -> None:
+        key = (player_id, team_id, season_id)
+        if key in self._rosters_seen:
+            return
+        self._rosters_seen.add(key)
         cur.execute(
             """
             INSERT INTO roster (player_id, team_id, season_id, jersey_number, position)
@@ -568,7 +725,7 @@ class Writer:
 
         for ps in s.players:
             team_id = self.upsert_team(cur, sport, ps.team)
-            player_id = self.upsert_player(cur, sport, ps.player)
+            player_id = self.upsert_player(cur, sport, ps.player, team_id)
             cur.execute(
                 """
                 INSERT INTO player_game_stat (game_id, player_id, team_id, stats)
@@ -600,7 +757,13 @@ class Writer:
                 for t in result.teams:
                     self.upsert_team_record(cur, t)
                 for g in result.games:
-                    self.upsert_game(cur, g)
+                    cur.execute("SAVEPOINT game")
+                    try:
+                        self.upsert_game(cur, g)
+                    except UnmatchedTeam:
+                        cur.execute("ROLLBACK TO SAVEPOINT game")
+                    else:
+                        cur.execute("RELEASE SAVEPOINT game")
                 for s in result.standings:
                     self.upsert_standing(cur, s)
                 for r in result.rosters:

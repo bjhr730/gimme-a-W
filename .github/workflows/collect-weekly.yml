@@ -1,4 +1,4 @@
-name: Collect rosters (ESPN)
+name: Collect weekly (rosters and history)
 
 on:
   schedule:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       league:
-        description: "League slug or 'all'"
+        description: "League slug or 'all' (rosters)"
         default: "all"
 
 concurrency:
@@ -15,9 +15,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  rosters:
+  weekly:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: collectors
@@ -30,7 +30,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen --no-dev
-      - name: Collect every team's roster
+      - name: Rosters for every team (ESPN)
         run: |
           uv run gimme-collect run espn --kind roster \
             --league "${{ github.event.inputs.league || 'all' }}"
+      - name: Current NFL season from nflverse (games, closing lines, player weeks)
+        if: always()
+        run: uv run gimme-collect run nflverse --seasons current --what games,players
+      - name: Current soccer seasons from football-data.co.uk (shots, corners, closing odds)
+        if: always()
+        run: uv run gimme-collect run fdcouk --league all --seasons current
+      - name: Recompute team form and Elo ratings
+        if: always()
+        run: uv run gimme-collect derive --what form,elo
