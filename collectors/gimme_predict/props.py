@@ -19,6 +19,7 @@ from gimme_predict.players import (
     load_player_games,
     load_rosters,
     load_team_games,
+    rostered_anywhere,
     walk_football,
 )
 
@@ -50,16 +51,19 @@ def predict_football(
         return None
     team_ids = sorted({t for g in upcoming for t in (g.home_id, g.away_id)})
     rosters = load_rosters(conn, team_ids)
-    # players seen recently but missing from a roster (nflverse ids) still get predictions
+    # Players with stats but no roster row anywhere (some nflverse ids) fall back to
+    # the team of their last game. Anyone with a roster row is placed by the roster
+    # only, so a player who moved clubs is not listed for the old one as well.
     last_team: dict[int, tuple[int, str, str | None]] = {}
     for pg in rows:
         last_team[pg.player_id] = (pg.team_id, pg.name, pg.position)
+    has_roster = rostered_anywhere(conn, list(last_team))
     out = PropsOutput(train_size=model.train_size)
     for g in upcoming:
         for team_id, home in ((g.home_id, True), (g.away_id, False)):
             listed = {r["player_id"]: r for r in rosters.get(team_id, [])}
             for pid, (tid, name, pos) in last_team.items():
-                if tid == team_id and pid not in listed:
+                if tid == team_id and pid not in listed and pid not in has_roster:
                     listed[pid] = {"player_id": pid, "full_name": name, "position": pos}
             for pid, r in listed.items():
                 if pid not in players:

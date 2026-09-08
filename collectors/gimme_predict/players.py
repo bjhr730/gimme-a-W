@@ -93,26 +93,43 @@ def load_team_games(conn: psycopg.Connection[Any], competition_slug: str) -> lis
 def load_rosters(
     conn: psycopg.Connection[Any], team_ids: list[int]
 ) -> dict[int, list[dict[str, Any]]]:
-    """Latest-season roster per team: player id, name, position."""
+    """Current roster per team: each player listed once, under the team of their most
+    recent roster entry (latest season, then latest row), so a player who changed
+    clubs in the offseason no longer appears for both."""
     if not team_ids:
         return {}
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
-            SELECT DISTINCT ON (r.team_id, r.player_id)
-                   r.team_id, r.player_id, p.full_name, COALESCE(r.position, p.position) AS position
-            FROM roster r
-            JOIN player p ON p.id = r.player_id
-            JOIN season s ON s.id = r.season_id
-            WHERE r.team_id = ANY(%s)
-            ORDER BY r.team_id, r.player_id, s.year DESC
+            SELECT team_id, player_id, full_name, position FROM (
+                SELECT DISTINCT ON (r.player_id)
+                       r.team_id, r.player_id, p.full_name,
+                       COALESCE(r.position, p.position) AS position
+                FROM roster r
+                JOIN player p ON p.id = r.player_id
+                JOIN season s ON s.id = r.season_id
+                WHERE r.player_id IN (SELECT player_id FROM roster WHERE team_id = ANY(%s))
+                ORDER BY r.player_id, s.year DESC, r.id DESC
+            ) current
+            WHERE team_id = ANY(%s)
             """,
-            (team_ids,),
+            (team_ids, team_ids),
         )
         out: dict[int, list[dict[str, Any]]] = defaultdict(list)
         for r in cur.fetchall():
             out[r["team_id"]].append(dict(r))
     return out
+
+
+def rostered_anywhere(conn: psycopg.Connection[Any], player_ids: list[int]) -> set[int]:
+    """Players that have any roster row (so a stats-only fallback is not needed)."""
+    if not player_ids:
+        return set()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT DISTINCT player_id FROM roster WHERE player_id = ANY(%s)", (player_ids,)
+        )
+        return {int(r[0]) for r in cur.fetchall()}
 
 
 def _num(v: Any) -> float:
