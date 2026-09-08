@@ -57,8 +57,11 @@ def _tau(x: int, y: int, lam: float, mu: float, rho: float) -> float:
     return 1.0
 
 
+MIN_XG, MAX_XG = 0.25, 4.0
+
+
 def train(
-    games: list[Game], *, as_of: datetime | None = None, ridge: float = 0.05, iterations: int = 300
+    games: list[Game], *, as_of: datetime | None = None, ridge: float = 0.2, iterations: int = 300
 ) -> SoccerModel | None:
     finals = [g for g in games if g.final]
     if len(finals) < 30:
@@ -152,8 +155,10 @@ def predict(model: SoccerModel, games: list[Game]) -> list[SoccerPrediction]:
         home = 0.0 if g.neutral else model.home
         # Attack strengths are centred on zero; the defence terms carry the league's
         # scoring level, so these are expected goals in real units.
-        lam = math.exp(a_h - d_a + home)
-        mu = math.exp(a_a - d_h)
+        # clubs with little history (promoted sides) can get extreme strengths; keep
+        # expected goals inside the range real matches occupy
+        lam = min(MAX_XG, max(MIN_XG, math.exp(a_h - d_a + home)))
+        mu = min(MAX_XG, max(MIN_XG, math.exp(a_a - d_h)))
         m = _score_matrix(lam, mu, model.rho)
         p_home = float(np.tril(m, -1).sum())
         p_draw = float(np.trace(m))
