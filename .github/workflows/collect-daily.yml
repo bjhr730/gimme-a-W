@@ -23,7 +23,9 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Collect, derive and predict across 21 competitions with a full season of
+    # lineups behind them. The old 45 minutes was set when there was far less data.
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: collectors
@@ -47,12 +49,16 @@ jobs:
         if: always()
         run: uv run gimme-collect run espn --kind scoreboard --league all --date today --days 10
       # A missed or failed run used to leave a hole in the season that nothing
-      # filled in later. Re-reading the last three weeks costs two range requests
-      # per league and closes any gap on the next run.
+      # filled in later. Re-reading the last three weeks closes any gap. Once a
+      # day is enough for that, and it costs about five minutes a pass.
       - name: Re-read the last three weeks so a missed run cannot leave a gap
         if: always()
         run: |
-          uv run gimme-collect run espn --kind scoreboard --league all --date "$(date -u -d '21 days ago' +%F)" --days 22
+          if [ "$(date -u +%H)" = "05" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            uv run gimme-collect run espn --kind scoreboard --league all --date "$(date -u -d '21 days ago' +%F)" --days 22
+          else
+            echo "Skipped: the three-week re-read runs on the 05:15 UTC pass."
+          fi
       - name: Recompute team form and Elo ratings
         if: always()
         run: uv run gimme-collect derive --what form,elo
