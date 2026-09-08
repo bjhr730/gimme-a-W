@@ -278,6 +278,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     finally:
         fetcher.close()
         if writer is not None and run_id is not None:
+            if writer.raw_pages_skipped:
+                print(
+                    f"Raw page cache: stored {writer.raw_pages_stored}, "
+                    f"skipped {writer.raw_pages_skipped} (too large or past this run's budget)"
+                )
             if writer.unmatched:
                 names = ", ".join(f"{n} x{c}" for n, c in sorted(writer.unmatched.items()))
                 print(f"Unmatched team names (games skipped): {names}", file=sys.stderr)

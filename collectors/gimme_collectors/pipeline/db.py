@@ -5,6 +5,7 @@ Column names are the contract with packages/db/src/schema.ts.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import psycopg
@@ -30,6 +31,16 @@ from gimme_collectors.pipeline.fetch import FetchResult
 from gimme_collectors.pipeline.teamnames import match_team
 
 SPORTS = {"soccer": "Soccer", "american_football": "American football"}
+
+# `raw_page` exists so a parser bug does not force a re-scrape, which makes it a
+# cache with a short useful life, not a record to keep. Left unbounded it grew to
+# 292 MB in a single day of backfilling and filled the database, so three limits
+# apply: skip bodies too big to be worth keeping, store only so many per run, and
+# drop anything older than the window. All three are env-tunable for a run that
+# genuinely needs deeper history.
+RAW_PAGE_MAX_BYTES = int(os.getenv("RAW_PAGE_MAX_BYTES", "262144"))  # 256 KB
+RAW_PAGE_PER_RUN = int(os.getenv("RAW_PAGE_PER_RUN", "200"))
+RAW_PAGE_RETENTION_DAYS = int(os.getenv("RAW_PAGE_RETENTION_DAYS", "2"))
 
 Cursor = psycopg.Cursor[dict[str, Any]]
 
@@ -60,6 +71,8 @@ class Writer:
             source_slug, source_name, base_url, rate_limit_per_min
         )
         self.rows_written = 0
+        self.raw_pages_stored = 0
+        self.raw_pages_skipped = 0
         self.unmatched: dict[str, int] = {}  # team name -> times skipped
         self._id_cache: dict[tuple[str, str], int] = {}
         # Per-run memo so bulk loads (thousands of rows naming the same teams, players,
@@ -98,7 +111,19 @@ class Writer:
         self.conn.commit()
         return source_id
 
+    def prune_raw_pages(self) -> int:
+        """Drop cached pages past the retention window. Returns rows removed."""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM raw_page WHERE fetched_at < now() - make_interval(days => %s)",
+                (RAW_PAGE_RETENTION_DAYS,),
+            )
+            removed = cur.rowcount
+        self.conn.commit()
+        return max(removed, 0)
+
     def begin_run(self, adapter: str, args: dict[str, Any]) -> int:
+        self.prune_raw_pages()
         with self.conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO collector_run (source_id, adapter, args) VALUES (%s, %s, %s) "
@@ -121,7 +146,18 @@ class Writer:
         self.conn.commit()
 
     def save_raw(self, result: FetchResult) -> None:
-        """Store a fetched page unless the latest copy of that URL has the same hash."""
+        """Store a fetched page unless the latest copy of that URL has the same hash.
+
+        Bodies over the size limit and anything past this run's budget are skipped:
+        the cache is there to save a re-fetch while debugging a parser, and a
+        backfill's thousands of pages are neither cheap to keep nor worth keeping.
+        """
+        if self.raw_pages_stored >= RAW_PAGE_PER_RUN:
+            self.raw_pages_skipped += 1
+            return
+        if len(result.body) > RAW_PAGE_MAX_BYTES:
+            self.raw_pages_skipped += 1
+            return
         with self.conn.cursor() as cur:
             cur.execute(
                 "SELECT content_hash FROM raw_page WHERE url = %s ORDER BY fetched_at DESC LIMIT 1",
@@ -146,6 +182,7 @@ class Writer:
                     result.body,
                 ),
             )
+        self.raw_pages_stored += 1
         self.conn.commit()
 
     def _lookup_external(self, cur: Cursor, entity_type: str, external_id: str) -> int | None:
