@@ -215,14 +215,22 @@ def season_from(node: dict[str, Any], fallback_year: int | None = None) -> Seaso
     )
 
 
-def _team(t: dict[str, Any]) -> TeamRef:
+def team_external_id(t: dict[str, Any], lg: League) -> str:
+    """ESPN numeric team ids repeat across sports (soccer 359 is Arsenal, football 359 is
+    a college). The `uid` ("s:600~t:359", "s:20~l:28~t:17") is unique across everything,
+    so it is the external id. Fall back to a sport-scoped id if uid is missing."""
+    uid = t.get("uid")
+    return str(uid) if uid else f"{lg.espn_sport}:{t['id']}"
+
+
+def _team(t: dict[str, Any], lg: League) -> TeamRef:
     logo = t.get("logo")
     if not logo:
         logos = t.get("logos") or []
         logo = logos[0].get("href") if logos else None
     name = t.get("displayName") or t.get("name") or t.get("location") or str(t["id"])
     return TeamRef(
-        external_id=str(t["id"]),
+        external_id=team_external_id(t, lg),
         name=name,
         short_name=t.get("shortDisplayName") or t.get("name"),
         abbreviation=t.get("abbreviation"),
@@ -233,12 +241,12 @@ def _team(t: dict[str, Any]) -> TeamRef:
     )
 
 
-def _venue(v: dict[str, Any] | None) -> VenueRef | None:
+def _venue(v: dict[str, Any] | None, lg: League) -> VenueRef | None:
     if not v or not (v.get("fullName") or v.get("displayName")):
         return None
     address = v.get("address") or {}
     return VenueRef(
-        external_id=str(v["id"]) if v.get("id") else None,
+        external_id=f"{lg.espn_sport}:{v['id']}" if v.get("id") else None,
         name=v.get("fullName") or v.get("displayName"),
         city=address.get("city"),
         state=address.get("state"),
@@ -424,12 +432,12 @@ def parse_scoreboard(
         scored = status != "scheduled"
         games.append(
             GameRecord(
-                external_id=str(ev["id"]),
+                external_id=str(ev.get("uid") or f"{lg.espn_sport}:{ev['id']}"),
                 competition=competition,
                 season=season,
                 kickoff=kickoff,
-                home=_team(home["team"]),
-                away=_team(away["team"]),
+                home=_team(home["team"], lg),
+                away=_team(away["team"], lg),
                 home_score=_int(home.get("score")) if scored else None,
                 away_score=_int(away.get("score")) if scored else None,
                 status=status,
@@ -441,7 +449,7 @@ def parse_scoreboard(
                 conference_game=c.get("conferenceCompetition"),
                 attendance=_int(c.get("attendance")) or None,
                 weather=weather,
-                venue=_venue(c.get("venue")),
+                venue=_venue(c.get("venue"), lg),
                 home_stats=_competitor_stats(home),
                 away_stats=_competitor_stats(away),
                 odds=parse_odds(c, captured_at),
@@ -459,7 +467,7 @@ def parse_teams(payload: dict[str, Any], lg: League) -> list[TeamRecord]:
         t = entry.get("team") or entry
         if not t.get("id"):
             continue
-        out.append(TeamRecord(competition=competition, season=season, team=_team(t)))
+        out.append(TeamRecord(competition=competition, season=season, team=_team(t, lg)))
     return out
 
 
@@ -511,7 +519,7 @@ def parse_standings(payload: dict[str, Any], lg: League, as_of: date) -> list[St
                 StandingRecord(
                     competition=competition,
                     season=season,
-                    team=_team(entry["team"]),
+                    team=_team(entry["team"], lg),
                     as_of=as_of,
                     group_name="" if single_group else group,
                     rank=_int(stats.get("rank")) or position,

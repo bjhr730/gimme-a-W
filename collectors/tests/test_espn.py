@@ -88,6 +88,18 @@ def test_game_status_mapping():
     assert espn.game_status({}) == "scheduled"
 
 
+def test_external_ids_are_sport_scoped(fixture):
+    """ESPN reuses numeric team ids across sports; the uid must be the key."""
+    nfl = espn.parse_teams(fixture("espn/nfl-teams.json"), espn.league("nfl"))
+    eng = espn.parse_teams(fixture("espn/eng1-teams.json"), espn.league("eng.1"))
+    assert nfl[0].team.external_id == "s:20~l:28~t:22"
+    assert eng[0].team.external_id == "s:600~t:349"
+    games = espn.parse_scoreboard(fixture("espn/nfl-scoreboard.json"), espn.league("nfl"))
+    assert games[0].external_id.startswith("s:20~l:28~e:")
+    assert games[0].venue is not None and games[0].venue.external_id.startswith("football:")
+    assert espn.team_external_id({"id": "7"}, espn.league("eng.1")) == "soccer:7"
+
+
 def test_teams(fixture):
     nfl = espn.parse_teams(fixture("espn/nfl-teams.json"), espn.league("nfl"))
     eng = espn.parse_teams(fixture("espn/eng1-teams.json"), espn.league("eng.1"))
