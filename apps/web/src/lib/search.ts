@@ -8,6 +8,8 @@
  *   "tomorrow"               -> everything kicking off tomorrow
  *   "mahomes"                -> the player
  *   "elo" / "models"         -> the models page
+ *   "parlay"                 -> the parlay of the day
+ *   "status"                 -> data freshness and run history
  *
  * Pure functions over the same queries the pages use; no LLM involved.
  */
@@ -115,6 +117,7 @@ const STOP = new Set([
   "scores", "result", "results", "today", "tonight", "tomorrow", "yesterday", "this", "last", "next",
   "weekend", "week", "table", "standings", "standing", "league", "elo", "ratings", "rating", "models",
   "model", "prediction", "predictions", "odds", "line", "lines", "who", "wins", "win", "will", "beat",
+  "parlay", "parlays", "acca", "accas", "accumulator", "multi", "leg", "legs", "status", "health",
   ...WEEKDAYS,
 ]);
 
@@ -161,6 +164,20 @@ export async function runSearch(rawQuery: string): Promise<SearchResult> {
   const pages: SearchResult["pages"] = [];
   if (/\b(elo|ratings?|models?|back-?tests?)\b/.test(text)) {
     pages.push({ href: "/models", label: "Models", hint: "Back-tests and Elo ratings" });
+  }
+  if (/\b(parlays?|accas?|accumulators?|multis?|legs?)\b/.test(text)) {
+    pages.push({
+      href: "/parlay",
+      label: "Parlay of the day",
+      hint: "The likeliest call in each of today's games",
+    });
+  }
+  if (/\b(status|health|uptime|freshness|stale|collector)\b/.test(text)) {
+    pages.push({
+      href: "/status",
+      label: "System status",
+      hint: "Data freshness and run history",
+    });
   }
 
   // leagues: aliases first, then competition names
