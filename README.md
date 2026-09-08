@@ -243,6 +243,14 @@ uv run pytest
 `--kind all` collects scoreboards, teams, standings and game summaries (box scores, lineups,
 ESPN FPI picks). Rosters are separate because they cost one request per team.
 
+History loads (one-off, then refreshed weekly by the workflow):
+
+```bash
+uv run gimme-collect run nflverse --seasons 2015-2026 --what games
+uv run gimme-collect run nflverse --seasons 2024-2025 --what players
+uv run gimme-collect run fdcouk --league eng.1 --league esp.1 --seasons 2015-2025
+```
+
 ---
 
 ## Environment variables
@@ -270,7 +278,7 @@ Never commit `.env`. Commit `.env.example` with empty values instead.
 | **1 — Data spine** (done) | Drizzle schema + migrations · ESPN adapter for soccer/NFL/CFB · CLI · CI and daily collect workflows |
 | **2 — Web v1** (done) | Mobile-first Next.js app · today's games per sport with a date strip · game pages with stats and lines · team and standings pages · search · PWA manifest and icons from the logo. Player pages wait for roster data in phase 3 |
 | **3 — Depth** (done, ESPN part) | ESPN game summaries (full team box scores, per-player passing/rushing/receiving and goals/shots, soccer lineups, FPI picks) · ESPN rosters · `team_form` and Elo `rating` derivations · player pages, box scores on game pages, form/Elo/roster on team pages · weekly roster workflow |
-| **3b — Historical depth** (next) | football-data.co.uk seasons back to 2015 (corners, shots on target, closing odds) · nflverse weekly player stats · CFBD when a key is added · Sports-Reference last, under its rate limit |
+| **3b — Historical depth** (done) | nflverse: NFL games since 2015 with closing lines, weather and rest days, weekly player stats with EPA and target share · football-data.co.uk: league seasons with shots on target, corners and Bet365/Pinnacle opening and closing odds, matched to ESPN teams by name · Elo with season regression · weekly refresh workflow. CFBD when a key is added; Sports-Reference last, under its rate limit |
 | **4 — Game predictions** | Match result (1X2), win probability, total goals, total points · back-test harness vs closing lines · `/models` page |
 | **5 — Team and player markets** | Shots on target, corners, anytime goalscorer, anytime TD, passing/rushing/receiving yards · explanation panel per prediction |
 | **6 — Production** | Vercel + Neon + GitHub secrets · daily collect and predict workflows · monitoring of collector runs and model drift |

@@ -148,15 +148,24 @@ class Writer:
         self.conn.commit()
 
     def _lookup_external(self, cur: Cursor, entity_type: str, external_id: str) -> int | None:
+        """Resolve an external id to our entity id.
+
+        Ids are globally unambiguous strings (ESPN uids like "s:20~l:28~t:17", or
+        source-prefixed ids like "nflverse:00-0026158"), so a binding made by any
+        source counts. nflverse reuses ESPN uids on purpose: its games and teams must
+        land on the rows the ESPN collector created. Own-source bindings win ties.
+        """
         key = (entity_type, external_id)
         if key in self._id_cache:
             return self._id_cache[key]
         cur.execute(
             """
             SELECT entity_id FROM external_id
-            WHERE entity_type = %s AND source_id = %s AND external_id = %s
+            WHERE entity_type = %s AND external_id = %s
+            ORDER BY (source_id = %s) DESC, id
+            LIMIT 1
             """,
-            (entity_type, self.source_id, external_id),
+            (entity_type, external_id, self.source_id),
         )
         row = cur.fetchone()
         if row is None:
