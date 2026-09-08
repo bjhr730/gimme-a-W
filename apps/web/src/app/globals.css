@@ -67,6 +67,11 @@ body {
   body {
     padding-bottom: 48px;
   }
+  /* no tab bar on wider screens: the back-to-top button sits in the corner */
+  [data-desktop-bottom] {
+    bottom: 20px !important;
+    right: 20px;
+  }
 }
 
 .display {

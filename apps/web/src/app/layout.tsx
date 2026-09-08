@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Barlow_Condensed, Source_Sans_3 } from "next/font/google";
+import { BackToTop } from "@/components/back-to-top";
 import { Nav } from "@/components/nav";
 import "./globals.css";
 
@@ -45,7 +46,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <script dangerouslySetInnerHTML={{ __html: applySavedTheme }} />
         <Nav />
-        <main className="mx-auto w-full max-w-5xl px-3 pt-3 sm:px-5 sm:pt-5">{children}</main>
+        <main tabIndex={-1} className="mx-auto w-full max-w-5xl px-3 pt-3 outline-none sm:px-5 sm:pt-5">
+          {children}
+        </main>
+        <BackToTop />
       </body>
     </html>
   );
