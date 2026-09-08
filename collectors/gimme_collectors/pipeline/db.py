@@ -17,6 +17,7 @@ from gimme_collectors.models import (
     GameRecord,
     PickRecord,
     PlayerRef,
+    PlayerStatusRecord,
     RosterRecord,
     SeasonRef,
     StandingRecord,
@@ -176,8 +177,19 @@ class Writer:
     def _bind_external(
         self, cur: Cursor, entity_type: str, entity_id: int, external_id: str
     ) -> None:
-        # A venue matched by name may already carry a different id from this source
-        # (stadiums get new ESPN ids when renamed); keep the first binding then.
+        # An entity resolved by name may already carry a different id from this
+        # source: a stadium renamed, or a player ESPN lists under two ids across
+        # feeds. One binding per (entity, source) is enforced by the schema, so
+        # keep the one already stored and remember the alias for this run only.
+        cur.execute(
+            "SELECT external_id FROM external_id "
+            "WHERE entity_type = %s AND entity_id = %s AND source_id = %s",
+            (entity_type, entity_id, self.source_id),
+        )
+        existing = cur.fetchone()
+        if existing is not None and existing["external_id"] != external_id:
+            self._id_cache[(entity_type, external_id)] = entity_id
+            return
         if entity_type == "venue":
             cur.execute(
                 """
@@ -681,6 +693,48 @@ class Writer:
         self.upsert_roster(cur, player_id, team_id, season_id, r.jersey, r.position)
         self.rows_written += 1
 
+    def upsert_player_status(self, cur: Cursor, r: PlayerStatusRecord) -> None:
+        """One current report per player per source; a later report replaces it."""
+        competition_id = self.upsert_competition(cur, r.competition)
+        sport = r.competition.sport
+        try:
+            team_id = self._team_for_game(cur, competition_id, sport, r.team)
+        except UnmatchedTeam:
+            return
+        player_id = self.upsert_player(cur, sport, r.player, team_id)
+        cur.execute(
+            """
+            INSERT INTO player_status (player_id, team_id, source_id, status, availability,
+                                       play_probability, injury_type, body_location, detail,
+                                       side, return_date, comment, reported_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (player_id, source_id) DO UPDATE SET
+                team_id = EXCLUDED.team_id, status = EXCLUDED.status,
+                availability = EXCLUDED.availability,
+                play_probability = EXCLUDED.play_probability,
+                injury_type = EXCLUDED.injury_type, body_location = EXCLUDED.body_location,
+                detail = EXCLUDED.detail, side = EXCLUDED.side,
+                return_date = EXCLUDED.return_date, comment = EXCLUDED.comment,
+                reported_at = EXCLUDED.reported_at, updated_at = now()
+            """,
+            (
+                player_id,
+                team_id,
+                self.source_id,
+                r.status,
+                r.availability,
+                r.play_probability,
+                r.injury_type,
+                r.body_location,
+                r.detail,
+                r.side,
+                r.return_date,
+                r.comment,
+                r.reported_at,
+            ),
+        )
+        self.rows_written += 1
+
     def upsert_pick(
         self, cur: Cursor, game_id: int, pick_team_id: int | None, p: PickRecord
     ) -> None:
@@ -791,6 +845,14 @@ class Writer:
                     self.upsert_roster_record(cur, r)
                 for summary in result.summaries:
                     self.write_summary(cur, summary)
+                for status in result.statuses:
+                    cur.execute("SAVEPOINT status")
+                    try:
+                        self.upsert_player_status(cur, status)
+                    except UnmatchedTeam:
+                        cur.execute("ROLLBACK TO SAVEPOINT status")
+                    else:
+                        cur.execute("RELEASE SAVEPOINT status")
             self.conn.commit()
         except Exception:
             self.conn.rollback()

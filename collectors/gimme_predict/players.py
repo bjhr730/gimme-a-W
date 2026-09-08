@@ -190,6 +190,7 @@ def soccer_values(stats: dict[str, Any]) -> dict[str, float]:
         "goals": _num(stats.get("totalGoals")),
         "shots": _num(stats.get("totalShots")),
         "sot": _num(stats.get("shotsOnTarget")),
+        "assists": _num(stats.get("goalAssists")),
         "app": 1.0
         if (stats.get("starter") or stats.get("subbedIn") or _num(stats.get("appearances")) > 0)
         else 0.0,

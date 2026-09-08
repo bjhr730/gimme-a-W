@@ -15,6 +15,13 @@
       "when": 1788830699767,
       "tag": "0001_player_headshot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788848608348,
+      "tag": "0002_parallel_la_nuit",
+      "breakpoints": true
     }
   ]
 }

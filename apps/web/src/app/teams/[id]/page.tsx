@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { GameCard } from "@/components/game-card";
 import { PageTitle } from "@/components/page-title";
 import { TeamLogo } from "@/components/team-logo";
-import { eloRank, teamById, teamExtras } from "@/lib/queries";
+import { StatusBadge, TeamAvailability } from "@/components/injury-report";
+import { eloRank, teamById, teamExtras, teamInjuries } from "@/lib/queries";
 
 export const revalidate = 120;
 
@@ -37,7 +38,12 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
   if (!data) notFound();
   const { team, recent, upcoming, standings } = data;
   const soccer = team.sportId === "soccer";
-  const [extras, rank] = await Promise.all([teamExtras(team.id), eloRank(team.id, team.sportId)]);
+  const [extras, rank, injuries] = await Promise.all([
+    teamExtras(team.id),
+    eloRank(team.id, team.sportId),
+    teamInjuries(team.id),
+  ]);
+  const injuryByPlayer = new Map(injuries.map((r) => [r.playerId, r]));
   const form = extras.form[0];
   const formStats = (form?.stats ?? {}) as Record<string, number>;
 
@@ -157,6 +163,8 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
         </section>
       </div>
 
+      <TeamAvailability rows={injuries} />
+
       {extras.roster.length > 0 ? (
         <section className="mt-6">
           <h2 className="label mb-2 text-xs text-muted">Roster · {extras.roster.length} players</h2>
@@ -173,6 +181,11 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
                       >
                         <span className="tnum w-7 text-right text-muted">{r.jersey ?? ""}</span>
                         <span className="truncate">{r.player.fullName}</span>
+                        {injuryByPlayer.has(r.player.id) ? (
+                          <span className="ml-auto shrink-0">
+                            <StatusBadge row={injuryByPlayer.get(r.player.id)!} />
+                          </span>
+                        ) : null}
                       </Link>
                     </li>
                   ))}

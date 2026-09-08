@@ -1,0 +1,617 @@
+{
+ "timestamp": "2026-09-08T06:32:42Z",
+ "status": "success",
+ "injuries": [
+  {
+   "id": "22",
+   "displayName": "Arizona Cardinals",
+   "injuries": [
+    {
+     "id": "636350",
+     "status": "Questionable",
+     "date": "2026-09-07T20:34Z",
+     "shortComment": "Coach Mike LaFleur said he's \"optimistic\" Love (ankle) will be able to play Sunday against the Chargers, Darren Urban of the Cardinals' official site reports.",
+     "type": {
+      "id": "2",
+      "name": "INJURY_STATUS_QUESTIONABLE",
+      "description": "questionable",
+      "abbreviation": "Q"
+     },
+     "details": {
+      "fantasyStatus": {
+       "description": "QUESTIONABLE",
+       "abbreviation": "QUESTIONABLE"
+      },
+      "type": "Ankle",
+      "location": "Leg",
+      "detail": "Sprain",
+      "side": "Not Specified",
+      "returnDate": "2026-09-13"
+     },
+     "athlete": {
+      "displayName": "Jeremiyah Love",
+      "shortName": "J. Love",
+      "position": {
+       "id": "9",
+       "name": "Running Back",
+       "displayName": "Running Back",
+       "abbreviation": "RB",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4870808&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "22",
+       "uid": "s:20~l:28~t:22",
+       "name": "Cardinals",
+       "abbreviation": "ARI",
+       "displayName": "Arizona Cardinals"
+      }
+     }
+    },
+    {
+     "id": "636276",
+     "status": "Active",
+     "date": "2026-09-04T21:36Z",
+     "shortComment": "Brissett is listed with the first-team offense on the Cardinals' unofficial depth chart.",
+     "type": {
+      "id": "0",
+      "name": "INJURY_STATUS_ACTIVE",
+      "description": "active",
+      "abbreviation": "A"
+     },
+     "details": null,
+     "athlete": {
+      "displayName": "Jacoby Brissett",
+      "shortName": "J. Brissett",
+      "position": {
+       "id": "8",
+       "name": "Quarterback",
+       "displayName": "Quarterback",
+       "abbreviation": "QB",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:2578570&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "22",
+       "uid": "s:20~l:28~t:22",
+       "name": "Cardinals",
+       "abbreviation": "ARI",
+       "displayName": "Arizona Cardinals"
+      }
+     }
+    },
+    {
+     "id": "636162",
+     "status": "Active",
+     "date": "2026-09-03T17:00Z",
+     "shortComment": "The Cardinals signed Wilson to a three-year, $75 million contract extension Thursday, Adam Schefter of ESPN reports.",
+     "type": {
+      "id": "0",
+      "name": "INJURY_STATUS_ACTIVE",
+      "description": "active",
+      "abbreviation": "A"
+     },
+     "details": null,
+     "athlete": {
+      "displayName": "Michael Wilson",
+      "shortName": "M. Wilson",
+      "position": {
+       "id": "1",
+       "name": "Wide Receiver",
+       "displayName": "Wide Receiver",
+       "abbreviation": "WR",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4360761&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "22",
+       "uid": "s:20~l:28~t:22",
+       "name": "Cardinals",
+       "abbreviation": "ARI",
+       "displayName": "Arizona Cardinals"
+      }
+     }
+    },
+    {
+     "id": "636149",
+     "status": "Active",
+     "date": "2026-09-03T15:34Z",
+     "shortComment": "Allgeier is poised to begin the regular season splitting carries with Jeremiyah Love (ankle), whom Josh Weinfuss of ESPN.com reports is progressing well in his ",
+     "type": {
+      "id": "0",
+      "name": "INJURY_STATUS_ACTIVE",
+      "description": "active",
+      "abbreviation": "A"
+     },
+     "details": null,
+     "athlete": {
+      "displayName": "Tyler Allgeier",
+      "shortName": "T. Allgeier",
+      "position": {
+       "id": "9",
+       "name": "Running Back",
+       "displayName": "Running Back",
+       "abbreviation": "RB",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4373626&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "22",
+       "uid": "s:20~l:28~t:22",
+       "name": "Cardinals",
+       "abbreviation": "ARI",
+       "displayName": "Arizona Cardinals"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "1",
+   "displayName": "Atlanta Falcons",
+   "injuries": [
+    {
+     "id": "636354",
+     "status": "Active",
+     "date": "2026-09-07T23:09Z",
+     "shortComment": "Bates (back) was a full participant in Monday's practice, Daniel Flick of The Atlanta Journal-Constitution reports.",
+     "type": {
+      "id": "0",
+      "name": "INJURY_STATUS_ACTIVE",
+      "description": "active",
+      "abbreviation": "A"
+     },
+     "details": null,
+     "athlete": {
+      "displayName": "Jessie Bates III",
+      "shortName": "J. Bates III",
+      "position": {
+       "id": "36",
+       "name": "Safety",
+       "displayName": "Safety",
+       "abbreviation": "S",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:3919512&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "1",
+       "uid": "s:20~l:28~t:1",
+       "name": "Falcons",
+       "abbreviation": "ATL",
+       "displayName": "Atlanta Falcons"
+      }
+     }
+    },
+    {
+     "id": "636332",
+     "status": "Active",
+     "date": "2026-09-07T15:07Z",
+     "shortComment": "Head coach Kevin Stefanski said Monday that Rush will serve as the top backup to starting quarterback Tua Tagovailoa in the Falcons' Week 1 game against the Ste",
+     "type": {
+      "id": "0",
+      "name": "INJURY_STATUS_ACTIVE",
+      "description": "active",
+      "abbreviation": "A"
+     },
+     "details": null,
+     "athlete": {
+      "displayName": "Cooper Rush",
+      "shortName": "C. Rush",
+      "position": {
+       "id": "8",
+       "name": "Quarterback",
+       "displayName": "Quarterback",
+       "abbreviation": "QB",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:2972515&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "1",
+       "uid": "s:20~l:28~t:1",
+       "name": "Falcons",
+       "abbreviation": "ATL",
+       "displayName": "Atlanta Falcons"
+      }
+     }
+    },
+    {
+     "id": "636330",
+     "status": "Out",
+     "date": "2026-09-07T13:36Z",
+     "shortComment": "Penix (knee) won't start the season opener Sunday in Pittsburgh, after the Falcons named Tua Tagovailoa their top quarterback heading into Week 1, Will McFadden",
+     "type": {
+      "id": "4",
+      "name": "INJURY_STATUS_OUT",
+      "description": "out",
+      "abbreviation": "O"
+     },
+     "details": {
+      "fantasyStatus": {
+       "description": "OUT",
+       "abbreviation": "OUT"
+      },
+      "type": "Knee - ACL",
+      "location": "Leg",
+      "detail": "Surgery",
+      "side": "Left",
+      "returnDate": "2026-09-20"
+     },
+     "athlete": {
+      "displayName": "Michael Penix Jr.",
+      "shortName": "M. Penix Jr.",
+      "position": {
+       "id": "8",
+       "name": "Quarterback",
+       "displayName": "Quarterback",
+       "abbreviation": "QB",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4360423&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "1",
+       "uid": "s:20~l:28~t:1",
+       "name": "Falcons",
+       "abbreviation": "ATL",
+       "displayName": "Atlanta Falcons"
+      }
+     }
+    },
+    {
+     "id": "636328",
+     "status": "Active",
+     "date": "2026-09-07T12:23Z",
+     "shortComment": "The Falcons will have Tagovailoa start at quarterback in Sunday's season opener against the Steelers, Tom Pelissero of Netflix reports.",
+     "type": {
+      "id": "0",
+      "name": "INJURY_STATUS_ACTIVE",
+      "description": "active",
+      "abbreviation": "A"
+     },
+     "details": null,
+     "athlete": {
+      "displayName": "Tua Tagovailoa",
+      "shortName": "T. Tagovailoa",
+      "position": {
+       "id": "8",
+       "name": "Quarterback",
+       "displayName": "Quarterback",
+       "abbreviation": "QB",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4241479&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "1",
+       "uid": "s:20~l:28~t:1",
+       "name": "Falcons",
+       "abbreviation": "ATL",
+       "displayName": "Atlanta Falcons"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "33",
+   "displayName": "Baltimore Ravens",
+   "injuries": [
+    {
+     "id": "636372",
+     "status": "Active",
+     "date": "2026-09-08T00:12Z",
+     "shortComment": "Gwyn will serve as the starting center for the Ravens' Week 1 contest with the Colts.",
+     "type": {
+      "id": "0",
+      "name": "INJURY_STATUS_ACTIVE",
+      "description": "active",
+      "abbreviation": "A"
+     },
+     "details": null,
+     "athlete": {
+      "displayName": "Jovaughn Gwyn",
+      "shortName": "J. Gwyn",
+      "position": {
+       "id": "73",
+       "name": "Guard",
+       "displayName": "Guard",
+       "abbreviation": "G",
+       "leaf": false
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4362845&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "33",
+       "uid": "s:20~l:28~t:33",
+       "name": "Ravens",
+       "abbreviation": "BAL",
+       "displayName": "Baltimore Ravens"
+      }
+     }
+    },
+    {
+     "id": "636254",
+     "status": "Active",
+     "date": "2026-09-04T04:56Z",
+     "shortComment": "Fagnano is included on the Ravens' initial 53-man roster, Ryan Mink of the team's official site reports.",
+     "type": {
+      "id": "0",
+      "name": "INJURY_STATUS_ACTIVE",
+      "description": "active",
+      "abbreviation": "A"
+     },
+     "details": null,
+     "athlete": {
+      "displayName": "Joe Fagnano",
+      "shortName": "J. Fagnano",
+      "position": {
+       "id": "8",
+       "name": "Quarterback",
+       "displayName": "Quarterback",
+       "abbreviation": "QB",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4429582&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "33",
+       "uid": "s:20~l:28~t:33",
+       "name": "Ravens",
+       "abbreviation": "BAL",
+       "displayName": "Baltimore Ravens"
+      }
+     }
+    },
+    {
+     "id": "636157",
+     "status": "Questionable",
+     "date": "2026-09-03T16:28Z",
+     "shortComment": "Flowers (lower body) is practicing Thursday, Cordell Woodland of 105.7 The Fan Baltimore reports.",
+     "type": {
+      "id": "2",
+      "name": "INJURY_STATUS_QUESTIONABLE",
+      "description": "questionable",
+      "abbreviation": "Q"
+     },
+     "details": {
+      "fantasyStatus": {
+       "description": "QUESTIONABLE",
+       "abbreviation": "QUESTIONABLE"
+      },
+      "type": "Lower Body",
+      "detail": "Not Specified",
+      "side": "Not Specified",
+      "returnDate": "2026-09-13"
+     },
+     "athlete": {
+      "displayName": "Zay Flowers",
+      "shortName": "Z. Flowers",
+      "position": {
+       "id": "1",
+       "name": "Wide Receiver",
+       "displayName": "Wide Receiver",
+       "abbreviation": "WR",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:4429615&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "33",
+       "uid": "s:20~l:28~t:33",
+       "name": "Ravens",
+       "abbreviation": "BAL",
+       "displayName": "Baltimore Ravens"
+      }
+     }
+    },
+    {
+     "id": "636143",
+     "status": "Active",
+     "date": "2026-09-03T15:14Z",
+     "shortComment": "Andrews is one of four tight ends on the Ravens' 53-man roster, along with Durham Smythe, Matthew Hibner and Josh Cuevas.",
+     "type": {
+      "id": "0",
+      "name": "INJURY_STATUS_ACTIVE",
+      "description": "active",
+      "abbreviation": "A"
+     },
+     "details": null,
+     "athlete": {
+      "displayName": "Mark Andrews",
+      "shortName": "M. Andrews",
+      "position": {
+       "id": "7",
+       "name": "Tight End",
+       "displayName": "Tight End",
+       "abbreviation": "TE",
+       "leaf": true
+      },
+      "links": [
+       {
+        "language": "en-US",
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "athlete"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:28~a:3116365&section=stats",
+        "text": "Stats",
+        "shortText": "Stats",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "team": {
+       "id": "33",
+       "uid": "s:20~l:28~t:33",
+       "name": "Ravens",
+       "abbreviation": "BAL",
+       "displayName": "Baltimore Ravens"
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

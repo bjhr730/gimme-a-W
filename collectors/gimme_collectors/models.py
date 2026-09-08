@@ -138,6 +138,27 @@ class RosterRecord(BaseModel):
     position: str | None = None
 
 
+class PlayerStatusRecord(BaseModel):
+    """A player's current injury / availability report.
+
+    `availability` is the normalized verdict the prediction models read;
+    `status` keeps the source's own wording for display."""
+
+    competition: CompetitionRef
+    team: TeamRef
+    player: PlayerRef
+    status: str  # 'Questionable', 'Injured Reserve', ...
+    availability: Literal["available", "questionable", "doubtful", "out"]
+    play_probability: float | None = None
+    injury_type: str | None = None
+    body_location: str | None = None
+    detail: str | None = None
+    side: str | None = None
+    return_date: date | None = None
+    comment: str | None = None
+    reported_at: datetime | None = None
+
+
 class PlayerGameStatRecord(BaseModel):
     team: TeamRef
     player: PlayerRef
@@ -180,6 +201,7 @@ class CollectResult(BaseModel):
     standings: list[StandingRecord] = Field(default_factory=list)
     rosters: list[RosterRecord] = Field(default_factory=list)
     summaries: list[SummaryRecord] = Field(default_factory=list)
+    statuses: list[PlayerStatusRecord] = Field(default_factory=list)
     fetched_urls: list[str] = Field(default_factory=list)
 
     def counts(self) -> dict[str, int]:
@@ -189,6 +211,7 @@ class CollectResult(BaseModel):
             "standings": len(self.standings),
             "rosters": len(self.rosters),
             "summaries": len(self.summaries),
+            "statuses": len(self.statuses),
             "player_stats": sum(len(s.players) for s in self.summaries),
             "requests": len(self.fetched_urls),
         }

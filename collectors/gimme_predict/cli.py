@@ -189,6 +189,11 @@ def cmd_run(args: argparse.Namespace) -> int:
                     print(
                         f"[{slug}] props: {len(output.football)} player lines, "
                         f"{len(output.team_counts)} team counts, {len(output.scorers)} scorers"
+                        + (
+                            f", {output.withheld} withheld as out, {output.flagged} flagged"
+                            if output.withheld or output.flagged
+                            else ""
+                        )
                     )
                     for s in output.scorers[:3]:
                         print(f"    scorer {s.name} {s.probability:.0%}")
@@ -211,7 +216,13 @@ def cmd_run(args: argparse.Namespace) -> int:
                         writer.finish(
                             run_id,
                             status="succeeded",
-                            metrics={"competition": slug, "train_rows": output.train_size},
+                            metrics={
+                                "competition": slug,
+                                "train_rows": output.train_size,
+                                # how the injury report changed the slate
+                                "players_withheld_unavailable": output.withheld,
+                                "players_flagged_doubtful": output.flagged,
+                            },
                             snapshot_count=output.count(),
                         )
             if "games" not in markets:

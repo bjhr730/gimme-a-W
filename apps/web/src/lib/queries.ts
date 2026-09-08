@@ -8,6 +8,7 @@ import {
   pick,
   player,
   playerGameStat,
+  playerStatus,
   prediction,
   rating,
   roster,
@@ -461,6 +462,201 @@ export async function playerById(id: number) {
       .limit(25),
   ]);
   return { player: p, teams, log };
+}
+
+// ------------------------------------------------------ parlay of the day
+
+export type ParlayLeg = {
+  gameId: number;
+  market: string;
+  selection: string;
+  subjectType: string;
+  subjectId: number;
+  probability: number;
+  line: string | null;
+  kickoff: Date;
+  competitionName: string;
+  competitionSlug: string;
+  homeName: string;
+  homeShort: string | null;
+  awayName: string;
+  awayShort: string | null;
+  playerName: string | null;
+  playerPosition: string | null;
+  subjectTeamName: string | null;
+  subjectTeamShort: string | null;
+};
+
+// A leg the model puts above this is not a real market: it adds nothing to a
+// parlay and says more about model confidence than about the game.
+const PARLAY_CEILING = 0.95;
+
+/**
+ * The most likely call in each of the day's games, best first.
+ *
+ * One leg per game on purpose. Two legs from the same match move together, so
+ * multiplying them would overstate the parlay's chance of landing.
+ */
+export async function parlayLegs(day: string, limit = 20): Promise<ParlayLeg[]> {
+  const rows = await db().execute(sql`
+    with latest_runs as (
+      select distinct on (model_name, coalesce(notes, '')) id
+      from model_run
+      order by model_name, coalesce(notes, ''), id desc
+    ),
+    legs as (
+      select distinct on (p.game_id)
+        p.game_id, p.market, p.selection, p.subject_type, p.subject_id,
+        p.probability, p.line, g.kickoff,
+        c.name as competition_name, c.slug as competition_slug,
+        h.name as home_name, h.short_name as home_short,
+        a.name as away_name, a.short_name as away_short,
+        pl.full_name as player_name, pl.position as player_position,
+        st.name as subject_team_name, st.short_name as subject_team_short
+      from prediction p
+      join latest_runs lr on lr.id = p.model_run_id
+      join game g on g.id = p.game_id
+      join competition c on c.id = g.competition_id
+      join team h on h.id = g.home_team_id
+      join team a on a.id = g.away_team_id
+      left join player pl on p.subject_type = 'player' and pl.id = p.subject_id
+      left join team st on p.subject_type = 'team' and st.id = p.subject_id
+      where p.probability is not null
+        and p.probability <= ${PARLAY_CEILING}
+        and g.status = 'scheduled'
+        and g.kickoff > now()
+        and to_char(g.kickoff at time zone ${SPORTS_TZ}, 'YYYY-MM-DD') = ${day}
+      order by p.game_id, p.probability desc
+    )
+    select * from legs order by probability desc limit ${limit}
+  `);
+  return (rows as unknown as Record<string, unknown>[]).map((r) => ({
+    gameId: Number(r.game_id),
+    market: String(r.market),
+    selection: String(r.selection ?? ""),
+    subjectType: String(r.subject_type),
+    subjectId: Number(r.subject_id),
+    probability: Number(r.probability),
+    line: r.line === null || r.line === undefined ? null : String(r.line),
+    kickoff: new Date(r.kickoff as string),
+    competitionName: String(r.competition_name),
+    competitionSlug: String(r.competition_slug),
+    homeName: String(r.home_name),
+    homeShort: (r.home_short as string) ?? null,
+    awayName: String(r.away_name),
+    awayShort: (r.away_short as string) ?? null,
+    playerName: (r.player_name as string) ?? null,
+    playerPosition: (r.player_position as string) ?? null,
+    subjectTeamName: (r.subject_team_name as string) ?? null,
+    subjectTeamShort: (r.subject_team_short as string) ?? null,
+  }));
+}
+
+/**
+ * Today's legs when today still has games to come, otherwise the next day that
+ * does. Returns the day it settled on so the page can say which one it means.
+ */
+export async function parlayForToday(
+  startDay: string,
+  limit = 20,
+): Promise<{ day: string; legs: ParlayLeg[] }> {
+  let day = startDay;
+  for (let i = 0; i < 4; i += 1) {
+    const legs = await parlayLegs(day, limit);
+    if (legs.length >= 2) return { day, legs };
+    const next = new Date(`${day}T12:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    day = next.toISOString().slice(0, 10);
+  }
+  return { day: startDay, legs: [] };
+}
+
+// ------------------------------------------------------- injury reports
+
+export type InjuryRow = {
+  playerId: number;
+  playerName: string;
+  position: string | null;
+  headshotUrl: string | null;
+  teamId: number | null;
+  availability: "available" | "questionable" | "doubtful" | "out";
+  status: string;
+  injuryType: string | null;
+  bodyLocation: string | null;
+  detail: string | null;
+  returnDate: string | null;
+  comment: string | null;
+  reportedAt: Date | null;
+};
+
+// Worst news first: a player who is out matters more than one who is a doubt.
+const injurySeverity = sql`case ${playerStatus.availability}
+  when 'out' then 0 when 'doubtful' then 1 when 'questionable' then 2 else 3 end`;
+
+const injuryCols = {
+  playerId: playerStatus.playerId,
+  playerName: player.fullName,
+  position: player.position,
+  headshotUrl: player.headshotUrl,
+  teamId: playerStatus.teamId,
+  availability: playerStatus.availability,
+  status: playerStatus.status,
+  injuryType: playerStatus.injuryType,
+  bodyLocation: playerStatus.bodyLocation,
+  detail: playerStatus.detail,
+  returnDate: sql<string | null>`${playerStatus.returnDate}::text`,
+  comment: playerStatus.comment,
+  reportedAt: playerStatus.reportedAt,
+};
+
+/** Everyone on either team who is carrying a report, worst news first. */
+export async function gameInjuries(teamIds: number[]): Promise<InjuryRow[]> {
+  if (teamIds.length === 0) return [];
+  const rows = await db()
+    .select(injuryCols)
+    .from(playerStatus)
+    .innerJoin(player, eq(playerStatus.playerId, player.id))
+    .where(
+      and(
+        inArray(playerStatus.teamId, teamIds),
+        sql`${playerStatus.availability} <> 'available'`,
+      ),
+    )
+    .orderBy(injurySeverity, asc(player.fullName));
+  return rows as InjuryRow[];
+}
+
+/** The report for one team, for the team page. */
+export async function teamInjuries(teamId: number): Promise<InjuryRow[]> {
+  return gameInjuries([teamId]);
+}
+
+/** The report for one player, for the player page. */
+export async function playerInjury(playerId: number): Promise<InjuryRow | null> {
+  const rows = await db()
+    .select(injuryCols)
+    .from(playerStatus)
+    .innerJoin(player, eq(playerStatus.playerId, player.id))
+    .where(eq(playerStatus.playerId, playerId))
+    .orderBy(injurySeverity)
+    .limit(1);
+  return (rows[0] as InjuryRow) ?? null;
+}
+
+/** Status for a set of players, keyed by player id, for badges on market tables. */
+export async function statusesForPlayers(
+  playerIds: number[],
+): Promise<Map<number, InjuryRow>> {
+  const out = new Map<number, InjuryRow>();
+  if (playerIds.length === 0) return out;
+  const rows = await db()
+    .select(injuryCols)
+    .from(playerStatus)
+    .innerJoin(player, eq(playerStatus.playerId, player.id))
+    .where(inArray(playerStatus.playerId, playerIds))
+    .orderBy(injurySeverity);
+  for (const r of rows as InjuryRow[]) if (!out.has(r.playerId)) out.set(r.playerId, r);
+  return out;
 }
 
 // ------------------------------------------------------------ phase 4

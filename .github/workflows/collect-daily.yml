@@ -36,7 +36,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen --no-dev
-      - name: Collect scoreboard, teams, standings and game summaries
+      - name: Collect scoreboard, teams, standings, injuries and game summaries
         run: |
           uv run gimme-collect run espn \
             --kind all \
@@ -46,6 +46,13 @@ jobs:
       - name: Fixtures for the next ten days (one range request per league)
         if: always()
         run: uv run gimme-collect run espn --kind scoreboard --league all --date today --days 10
+      # A missed or failed run used to leave a hole in the season that nothing
+      # filled in later. Re-reading the last three weeks costs two range requests
+      # per league and closes any gap on the next run.
+      - name: Re-read the last three weeks so a missed run cannot leave a gap
+        if: always()
+        run: |
+          uv run gimme-collect run espn --kind scoreboard --league all --date "$(date -u -d '21 days ago' +%F)" --days 22
       - name: Recompute team form and Elo ratings
         if: always()
         run: uv run gimme-collect derive --what form,elo

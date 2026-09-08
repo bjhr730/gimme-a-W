@@ -1,13 +1,16 @@
-"""Soccer props: shots on target and corners per team (negative-binomial GLM) and
-anytime goalscorer per player (expected goals share).
+"""Soccer props: shots on target and corners per team (negative-binomial GLM),
+and goals, assists and shots on target per player.
 
 Team counts: log E[count] = b0 + b1 log(team rate for) + b2 log(opponent rate against)
 + b3 home, over the last 8 games. Over/under probabilities use the fitted
 negative-binomial dispersion.
 
-Anytime scorer: lambda = team expected goals x player's share of the team's
-recent goal threat (goals plus a fraction of shots) x probability of playing.
-P(scores) = 1 - exp(-lambda).
+Player markets: each player takes a share of the team's expected goals and
+expected shots on target, weighted by their recent rate per appearance and by the
+minutes they are expected to play. Assists come from the team's expected goals
+scaled by the share of goals that are assisted, with the player's own share shrunk
+toward their share of minutes because assists are sparse. Counts are Poisson, so
+P(at least one) = 1 - exp(-lambda).
 """
 
 from __future__ import annotations
@@ -182,94 +185,213 @@ def predict_counts(model: SoccerPropsModel, game: Game) -> list[TeamProp]:
     return out
 
 
-# ------------------------------------------------------------ scorers
+# ------------------------------------------------- goals, assists, shots
+
+# Roughly three in four goals are assisted, so a team's assists are its expected
+# goals scaled down; the rest are unassisted.
+ASSIST_RATE = 0.75
+# Assists are rare enough in an eight-game window that a raw share is mostly
+# noise, so it is shrunk toward the player's share of minutes. This is the number
+# of assists' worth of evidence needed before the observed share carries half the
+# weight.
+ASSIST_PRIOR_K = 4.0
+MIN_EXPECTED_GOALS = 0.02
+MIN_EXPECTED_SOT = 0.15
+# A full lineup is worth about this much minutes-weighted presence once the
+# goalkeeper is set aside. Early in a season only part of a squad has appeared,
+# and the players we have no record of still take a share of the team's goals:
+# without this the handful on record would split the whole total between them.
+EXPECTED_SQUAD_WEIGHT = 10.0
+# Appearances' worth of squad-average evidence mixed into every player's rate.
+# One goal in one appearance is not a goal a game; this says so.
+SHRINK_APPEARANCES = 4.0
 
 
 @dataclass
 class ScorerProp:
+    """One player's attacking markets for one game.
+
+    Shares are built so that a team's players sum back to the team's own expected
+    goals and expected shots on target: nobody is projected in isolation.
+    """
+
     game_id: int
     team_id: int
     player_id: int
     name: str
     position: str | None
-    probability: float
+    probability: float  # anytime scorer
     expected_goals: float
+    expected_assists: float = 0.0
+    assist_probability: float = 0.0
+    expected_sot: float = 0.0
+    sot_probability: float = 0.0  # one or more
+    sot_two_probability: float = 0.0  # two or more
     explanation: dict[str, Any] = field(default_factory=dict)
 
 
 def player_threat(rows: list[PlayerGame]) -> dict[int, Rolling]:
-    """Rolling per-player goal threat from lineup rows (already in kickoff order)."""
+    """Rolling per-player attacking record from lineup rows (in kickoff order)."""
     players: dict[int, Rolling] = defaultdict(Rolling)
     for pg in rows:
         players[pg.player_id].push(soccer_values(pg.stats))
     return players
 
 
-def predict_scorers(
+def _totals(r: Rolling) -> dict[str, float]:
+    return {
+        key: sum(v.get(key, 0.0) for v in r.window)
+        for key in ("goals", "shots", "sot", "assists", "app", "start")
+    }
+
+
+def _poisson_at_least(lam: float, k: int) -> float:
+    """P(X >= k) for a Poisson count, for k of 1 or 2."""
+    if lam <= 0:
+        return 0.0
+    if k == 1:
+        return 1 - math.exp(-lam)
+    return 1 - math.exp(-lam) * (1 + lam)
+
+
+def predict_players(
     game: Game,
     *,
     team_id: int,
     team_xg: float,
+    team_sot: float | None,
     roster: list[dict[str, Any]],
     threat: dict[int, Rolling],
     team_games_window: int,
+    play_probability: dict[int, float] | None = None,
 ) -> list[ScorerProp]:
-    """Anytime scorer probabilities for one team's players in one game."""
-    candidates = []
-    for p in roster:
-        r = threat.get(p["player_id"])
-        if r is None or r.games == 0:
+    """Goals, assists and shots on target for one team's players in one game.
+
+    `team_xg` is the team's expected goals from the match model and `team_sot`
+    its expected shots on target from the count model. Each player takes a share
+    of both, weighted by their recent rate and by how much of the match they are
+    expected to be on the pitch for, so the parts add up to the team's total.
+
+    Two corrections keep a short season honest. Rates are shrunk toward the
+    squad average, so one goal in one appearance is not read as a goal a game.
+    Shares are diluted when only part of a squad has appeared, so the players on
+    record do not split a total that belongs to the whole team.
+    """
+    candidates: list[dict[str, Any]] = []
+    for entry in roster:
+        rolling = threat.get(entry["player_id"])
+        if rolling is None or rolling.games == 0:
             continue
-        apps = sum(v.get("app", 0.0) for v in r.window)
+        totals = _totals(rolling)
+        apps = totals["app"]
         if apps == 0:
             continue
-        per_app_threat = (
-            sum(v.get("goals", 0.0) + SHOT_WEIGHT * v.get("shots", 0.0) for v in r.window) / apps
-        )
-        play_prob = min(1.0, apps / max(team_games_window, 1))
-        starts = sum(v.get("start", 0.0) for v in r.window) / apps
-        minutes_factor = 0.55 + 0.45 * starts  # subs see roughly half the minutes
-        candidates.append((p, r, per_app_threat, play_prob, minutes_factor))
-    team_threat = sum(c[2] * c[3] * c[4] for c in candidates)
-    if team_threat <= 0:
-        return []
-    out: list[ScorerProp] = []
-    for p, r, per_app_threat, play_prob, minutes_factor in candidates:
-        share = per_app_threat * minutes_factor / team_threat
-        lam = (
-            team_xg * share * play_prob * (1 / max(play_prob, 1e-6)) * play_prob
-        )  # = team_xg * share * play_prob
-        lam = team_xg * share * play_prob
-        if lam <= 0.02:
+        available = 1.0
+        if play_probability is not None:
+            available = play_probability.get(entry["player_id"], 1.0)
+        if available <= 0:
             continue
+        starter_rate = totals["start"] / apps
+        # a substitute is on the pitch for roughly half a starter's minutes
+        minutes_factor = 0.55 + 0.45 * starter_rate
+        selection = min(1.0, apps / max(team_games_window, 1)) * available
+        candidates.append(
+            {
+                "entry": entry,
+                "apps": apps,
+                "totals": totals,
+                "starter_rate": starter_rate,
+                "weight": selection * minutes_factor,
+                "selection": selection,
+            }
+        )
+    if not candidates:
+        return []
+
+    index = list(range(len(candidates)))
+    appearances = sum(c["apps"] for c in candidates)
+
+    def rate(i: int, key: str) -> float:
+        """Per-appearance rate, pulled toward the squad average by the number of
+        appearances still missing from a settled sample."""
+        prior = (sum(c["totals"][key] for c in candidates) / appearances) if appearances else 0.0
+        c = candidates[i]
+        return (c["totals"][key] + SHRINK_APPEARANCES * prior) / (c["apps"] + SHRINK_APPEARANCES)
+
+    weight_total = sum(c["weight"] for c in candidates)
+    # the minutes belonging to players we have no record of
+    missing_weight = max(0.0, EXPECTED_SQUAD_WEIGHT - weight_total)
+
+    def divide(raw: dict[int, float]) -> dict[int, float]:
+        """Share out a team total, leaving the unrecorded squad its part."""
+        observed = sum(raw.values())
+        if observed <= 0 or weight_total <= 0:
+            return {}
+        # the missing players are assumed to be as productive per minute as the
+        # ones on record, which keeps a thin squad from inflating anybody
+        per_weight = observed / weight_total
+        total = observed + missing_weight * per_weight
+        return {i: v / total for i, v in raw.items()}
+
+    minutes_share = divide({i: candidates[i]["weight"] for i in index}) or {i: 0.0 for i in index}
+    goal_share = divide(
+        {
+            i: (rate(i, "goals") + SHOT_WEIGHT * rate(i, "shots")) * candidates[i]["weight"]
+            for i in index
+        }
+    ) or dict(minutes_share)
+    sot_share = divide({i: rate(i, "sot") * candidates[i]["weight"] for i in index}) or dict(
+        minutes_share
+    )
+    assist_raw = divide({i: rate(i, "assists") * candidates[i]["weight"] for i in index}) or dict(
+        minutes_share
+    )
+    assists_seen = sum(c["totals"]["assists"] for c in candidates)
+    blend = assists_seen / (assists_seen + ASSIST_PRIOR_K)
+    assist_share = {
+        i: blend * assist_raw[i] + (1 - blend) * minutes_share[i] for i in minutes_share
+    }
+
+    covered = round(min(1.0, weight_total / EXPECTED_SQUAD_WEIGHT), 2)
+    team_assists = team_xg * ASSIST_RATE
+    out: list[ScorerProp] = []
+    for i in index:
+        c = candidates[i]
+        lam_goal = team_xg * goal_share[i]
+        lam_assist = team_assists * assist_share[i]
+        lam_sot = (team_sot * sot_share[i]) if team_sot else 0.0
+        if lam_goal < MIN_EXPECTED_GOALS and lam_sot < MIN_EXPECTED_SOT:
+            continue
+        entry = c["entry"]
+        apps = c["apps"]
         out.append(
             ScorerProp(
                 game_id=game.id,
                 team_id=team_id,
-                player_id=p["player_id"],
-                name=p["full_name"],
-                position=p.get("position"),
-                probability=round(1 - math.exp(-lam), 4),
-                expected_goals=round(lam, 3),
+                player_id=entry["player_id"],
+                name=entry["full_name"],
+                position=entry.get("position"),
+                probability=round(_poisson_at_least(lam_goal, 1), 4),
+                expected_goals=round(lam_goal, 3),
+                expected_assists=round(lam_assist, 3),
+                assist_probability=round(_poisson_at_least(lam_assist, 1), 4),
+                expected_sot=round(lam_sot, 2),
+                sot_probability=round(_poisson_at_least(lam_sot, 1), 4),
+                sot_two_probability=round(_poisson_at_least(lam_sot, 2), 4),
                 explanation={
                     "team_expected_goals": round(team_xg, 2),
-                    "share_of_team_threat": round(share, 3),
-                    "goals_per_app_last_games": round(
-                        sum(v.get("goals", 0.0) for v in r.window) / apps_of(r), 2
-                    ),
-                    "shots_per_app_last_games": round(
-                        sum(v.get("shots", 0.0) for v in r.window) / apps_of(r), 2
-                    ),
-                    "play_probability": round(play_prob, 2),
-                    "starter_rate": round(
-                        sum(v.get("start", 0.0) for v in r.window) / apps_of(r), 2
-                    ),
+                    "team_expected_shots_on_target": round(team_sot, 2) if team_sot else None,
+                    "share_of_team_threat": round(goal_share[i], 3),
+                    "share_of_team_shots_on_target": round(sot_share[i], 3),
+                    "goals_per_appearance": round(c["totals"]["goals"] / apps, 2),
+                    "assists_per_appearance": round(c["totals"]["assists"] / apps, 2),
+                    "shots_on_target_per_appearance": round(c["totals"]["sot"] / apps, 2),
+                    "appearances_in_window": int(apps),
+                    "starter_rate": round(c["starter_rate"], 2),
+                    "play_probability": round(c["selection"], 2),
+                    "squad_covered": covered,
                 },
             )
         )
     out.sort(key=lambda s: -s.probability)
     return out
-
-
-def apps_of(r: Rolling) -> float:
-    return max(sum(v.get("app", 0.0) for v in r.window), 1.0)

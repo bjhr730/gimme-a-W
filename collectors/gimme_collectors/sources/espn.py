@@ -449,6 +449,14 @@ def parse_odds(comp: dict[str, Any], captured_at: datetime) -> list[OddsRecord]:
 # --------------------------------------------------------------- parsers
 
 
+def _has_started(ev: dict[str, Any]) -> bool:
+    """True once a game is in progress or complete, so a summary carries a box score."""
+    comps = ev.get("competitions") or []
+    node = (comps[0] if comps else ev).get("status") or ev.get("status") or {}
+    state = str((node.get("type") or {}).get("state") or "")
+    return state in {"in", "post"}
+
+
 def parse_scoreboard(
     payload: dict[str, Any], lg: League, captured_at: datetime | None = None
 ) -> list[GameRecord]:
@@ -619,18 +627,25 @@ class EspnAdapter:
         result.standings.extend(parse_standings(payload, lg, as_of))
 
     def summaries(self, lg: League, days: list[date], result: CollectResult) -> None:
-        """Game summaries for every event on the given days (box scores, lineups, FPI)."""
+        """Game summaries for every event on the given days (box scores, lineups, FPI).
+
+        A long range is a backfill: enumerate events one request per month and skip
+        games that have not kicked off, which have no box score to add."""
         from gimme_collectors.sources import espn_summary
 
+        backfill = len(days) > 7
+        ranges = month_chunks(days) if backfill else [(day, None) for day in days]
         seen: set[str] = set()
-        for day in days:
-            url = scoreboard_url(lg, day)
+        for start, end in ranges:
+            url = scoreboard_url(lg, start, end)
             payload, _ = self.fetcher.get_json(url)
             if url not in result.fetched_urls:
                 result.fetched_urls.append(url)
             for ev in payload.get("events") or []:
                 event_id = str(ev.get("id") or "")
                 if not event_id or event_id in seen:
+                    continue
+                if backfill and not _has_started(ev):
                     continue
                 seen.add(event_id)
                 surl = espn_summary.summary_url(lg, event_id)
@@ -639,6 +654,32 @@ class EspnAdapter:
                 summary = espn_summary.parse_summary(body, lg, captured_at=fetched.fetched_at)
                 if summary is not None:
                     result.summaries.append(summary)
+                if not backfill:
+                    from gimme_collectors.sources import espn_injuries
+
+                    result.statuses.extend(
+                        espn_injuries.parse_summary_injuries(
+                            body, lg, captured_at=fetched.fetched_at
+                        )
+                    )
+
+    def injuries(self, lg: League, result: CollectResult) -> None:
+        """League-wide injury report: one request for every team in the league.
+
+        ESPN publishes this for the NFL, thinly for college football and not at
+        all for soccer, so an empty list is a normal answer, not a failure."""
+        from gimme_collectors.sources import espn_injuries
+
+        url = espn_injuries.injuries_url(lg)
+        try:
+            payload, fetched = self.fetcher.get_json(url)
+        except httpx.HTTPStatusError as exc:
+            print(f"[{lg.slug}] no injury feed: {exc.response.status_code}")
+            return
+        result.fetched_urls.append(url)
+        result.statuses.extend(
+            espn_injuries.parse_league_injuries(payload, lg, captured_at=fetched.fetched_at)
+        )
 
     def rosters(self, lg: League, result: CollectResult) -> None:
         """Current roster of every team in the league (one request per team)."""
@@ -679,4 +720,6 @@ class EspnAdapter:
             self.summaries(lg, days, result)
         if "roster" in kinds:
             self.rosters(lg, result)
+        if "injuries" in kinds:
+            self.injuries(lg, result)
         return result

@@ -4,10 +4,19 @@ import { LocalTime } from "@/components/local-time";
 import { StatusPill } from "@/components/status-pill";
 import { TeamLogo } from "@/components/team-logo";
 import { FootballBoxScore, SoccerLineup } from "@/components/player-stats";
+import { InjuryReport } from "@/components/injury-report";
 import { PredictionPanel } from "@/components/prediction-panel";
 import { PropsPanel } from "@/components/props-panel";
 import { STAT_HIDDEN, STAT_LABELS, STAT_ORDER, americanOdds, signed, statNumber } from "@/lib/format";
-import { gameById, gamePicks, gamePlayers, gamePredictions, gameProps } from "@/lib/queries";
+import {
+  gameById,
+  gameInjuries,
+  gamePicks,
+  gamePlayers,
+  gamePredictions,
+  gameProps,
+  statusesForPlayers,
+} from "@/lib/queries";
 
 export const revalidate = 60;
 
@@ -53,11 +62,16 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const g = await gameById(Number(id));
   if (!g) notFound();
-  const [players, picks, predictions, props] = await Promise.all([
+  const [players, picks, predictions, props, injuries] = await Promise.all([
     gamePlayers(g.id),
     gamePicks(g.id),
     gamePredictions(g.id),
     gameProps(g.id),
+    gameInjuries([g.home.id, g.away.id]),
+  ]);
+  // badges on the market rows come from the same report shown above them
+  const propStatuses = await statusesForPlayers([
+    ...new Set(props.filter((p) => p.subjectType === "player").map((p) => p.subjectId)),
   ]);
   const awayPlayers = players.filter((p) => p.teamId === g.away.id);
   const homePlayers = players.filter((p) => p.teamId === g.home.id);
@@ -117,7 +131,14 @@ export default async function GamePage({ params }: { params: Promise<{ id: strin
       </section>
 
       <PredictionPanel rows={predictions} home={g.home} away={g.away} soccer={soccer} />
-      <PropsPanel rows={props} home={g.home} away={g.away} soccer={soccer} />
+      <InjuryReport rows={injuries} home={g.home} away={g.away} />
+      <PropsPanel
+        rows={props}
+        home={g.home}
+        away={g.away}
+        soccer={soccer}
+        statuses={propStatuses}
+      />
 
       {(g.homeStats.form || g.awayStats.form || g.homeStats.record || g.awayStats.record) ? (
         <section className="mt-4 grid grid-cols-2 gap-2">

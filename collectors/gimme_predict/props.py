@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import psycopg
 
-from gimme_predict import data
+from gimme_predict import availability, data
 from gimme_predict.markets import football_players, soccer, soccer_props
 from gimme_predict.models import log_loss
 from gimme_predict.players import (
@@ -30,6 +30,10 @@ class PropsOutput:
     team_counts: list[soccer_props.TeamProp] = field(default_factory=list)
     scorers: list[soccer_props.ScorerProp] = field(default_factory=list)
     train_size: dict[str, int] = field(default_factory=dict)
+    # players withheld because a source reports them out, and players kept but
+    # flagged as a doubt; both are reported in the model run's metrics.
+    withheld: int = 0
+    flagged: int = 0
 
     def count(self) -> int:
         return len(self.football) + len(self.team_counts) + len(self.scorers)
@@ -51,6 +55,7 @@ def predict_football(
         return None
     team_ids = sorted({t for g in upcoming for t in (g.home_id, g.away_id)})
     rosters = load_rosters(conn, team_ids)
+    statuses = availability.load(conn, team_ids)
     # Players with stats but no roster row anywhere (some nflverse ids) fall back to
     # the team of their last game. Anyone with a roster row is placed by the roster
     # only, so a player who moved clubs is not listed for the old one as well.
@@ -68,21 +73,37 @@ def predict_football(
             for pid, r in listed.items():
                 if pid not in players:
                     continue
-                out.football.extend(
-                    football_players.predict_player(
-                        model,
-                        game=g,
-                        home=home,
-                        player_id=pid,
-                        team_id=team_id,
-                        name=r["full_name"],
-                        position=r.get("position"),
-                        player=players[pid],
-                        team=teams[team_id],
-                        allowed=allowed[g.away_id if home else g.home_id],
-                    )
+                status = statuses.get(pid)
+                if status is not None and status.out:
+                    out.withheld += 1
+                    continue
+                projected = football_players.predict_player(
+                    model,
+                    game=g,
+                    home=home,
+                    player_id=pid,
+                    team_id=team_id,
+                    name=r["full_name"],
+                    position=r.get("position"),
+                    player=players[pid],
+                    team=teams[team_id],
+                    allowed=allowed[g.away_id if home else g.home_id],
                 )
+                if status is not None and status.availability != "available" and projected:
+                    out.flagged += 1
+                    apply_status(projected, status)
+                out.football.extend(projected)
     return out
+
+
+def apply_status(rows: list[football_players.PlayerProp], status: availability.Status) -> None:
+    """Record the report on every market, and scale the ones that ask whether an
+    event happens at all. A yards projection is conditional on the player taking
+    the field, so it is labelled rather than shrunk."""
+    for row in rows:
+        row.explanation = {**row.explanation, "availability": status.summary()}
+        if row.probability is not None and status.doubt:
+            row.probability = round(row.probability * status.play_probability, 5)
 
 
 def backtest_football(
@@ -210,6 +231,15 @@ def predict_soccer(
                 team_games[pg.team_id].append(pg.game_id)
         team_ids = sorted({t for g in upcoming for t in (g.home_id, g.away_id)})
         rosters = load_rosters(conn, team_ids)
+        statuses = availability.load(conn, team_ids)
+        # A player reported out takes no share of the team's goals or shots, so
+        # the rest of the squad absorbs it. Anyone with no report is left alone.
+        play_probability = {
+            pid: (0.0 if st.out else st.play_probability if st.doubt else 1.0)
+            for pid, st in statuses.items()
+        }
+        out.withheld += sum(1 for st in statuses.values() if st.out)
+        out.flagged += sum(1 for st in statuses.values() if st.doubt)
         # players in recent lineups count as rostered even without a roster pull
         for pg in player_rows[-4000:]:
             lst = rosters.setdefault(pg.team_id, [])
@@ -217,18 +247,26 @@ def predict_soccer(
                 lst.append(
                     {"player_id": pg.player_id, "full_name": pg.name, "position": pg.position}
                 )
+        # expected shots on target per team, so player shares add back to the team
+        team_sot = {
+            (t.game_id, t.team_id): t.mean
+            for t in out.team_counts
+            if t.market == "shots_on_target" and t.team_id is not None
+        }
         for g in upcoming:
             lam, mu = xg.get(g.id, (1.4, 1.1))
             for team_id, team_xg in ((g.home_id, lam), (g.away_id, mu)):
                 window = min(len(team_games.get(team_id, [])), Rolling().n)
                 out.scorers.extend(
-                    soccer_props.predict_scorers(
+                    soccer_props.predict_players(
                         g,
                         team_id=team_id,
                         team_xg=team_xg,
+                        team_sot=team_sot.get((g.id, team_id)),
                         roster=rosters.get(team_id, []),
                         threat=threat,
                         team_games_window=window,
+                        play_probability=play_probability,
                     )
                 )
     return out if out.count() else None

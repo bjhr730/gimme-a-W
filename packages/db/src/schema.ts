@@ -49,6 +49,14 @@ export const entityType = pgEnum("entity_type", [
 
 export const runStatus = pgEnum("run_status", ["running", "succeeded", "failed"]);
 
+/** How likely a player is to take part in the next game, worst case last. */
+export const availability = pgEnum("availability", [
+  "available",
+  "questionable",
+  "doubtful",
+  "out",
+]);
+
 // ------------------------------------------------------------- helpers
 
 const tz = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
@@ -189,6 +197,40 @@ export const roster = pgTable(
     position: text("position"),
   },
   (t) => [uniqueIndex("roster_uq").on(t.playerId, t.teamId, t.seasonId)],
+);
+
+/**
+ * Current injury / availability report for a player, one row per source.
+ * `availability` is the normalized verdict the models read; `status` keeps the
+ * source's own wording ("Questionable", "Injured Reserve") for display.
+ */
+export const playerStatus = pgTable(
+  "player_status",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => player.id),
+    teamId: integer("team_id").references(() => team.id),
+    sourceId: integer("source_id")
+      .notNull()
+      .references(() => source.id),
+    status: text("status").notNull(), // source wording
+    availability: availability("availability").notNull(),
+    playProbability: numeric("play_probability", { precision: 4, scale: 3 }),
+    injuryType: text("injury_type"), // 'Ankle'
+    bodyLocation: text("body_location"), // 'Leg'
+    detail: text("detail"), // 'Sprain'
+    side: text("side"),
+    returnDate: date("return_date"),
+    comment: text("comment"),
+    reportedAt: tz("reported_at"),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("player_status_uq").on(t.playerId, t.sourceId),
+    index("player_status_team_idx").on(t.teamId, t.availability),
+  ],
 );
 
 // ---------------------------------------------------------------- games

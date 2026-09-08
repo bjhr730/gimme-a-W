@@ -22,8 +22,8 @@ from gimme_collectors.models import CollectResult
 from gimme_collectors.pipeline.fetch import Fetcher
 from gimme_collectors.sources import espn, fdcouk, nflverse
 
-KINDS = {"scoreboard", "teams", "standings", "summary", "roster"}
-DAILY_KINDS = {"scoreboard", "teams", "standings", "summary"}  # `all`; rosters are weekly
+KINDS = {"scoreboard", "teams", "standings", "summary", "roster", "injuries"}
+DAILY_KINDS = {"scoreboard", "teams", "standings", "summary", "injuries"}  # `all`; rosters weekly
 DERIVATIONS = {"form", "elo"}
 
 SOURCES: dict[str, dict[str, Any]] = {
@@ -89,7 +89,8 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--kind",
         default="all",
-        help="espn: all | scoreboard | teams | standings | summary | roster (comma separated). "
+        help="espn: all | scoreboard | teams | standings | summary | injuries | roster "
+        "(comma separated). "
         "'all' is everything except roster.",
     )
     run.add_argument(

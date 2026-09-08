@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { LocalTime } from "@/components/local-time";
 import { TeamLogo } from "@/components/team-logo";
 import { statNumber } from "@/lib/format";
-import { playerById } from "@/lib/queries";
+import { PlayerStatusNote } from "@/components/injury-report";
+import { playerById, playerInjury } from "@/lib/queries";
 
 export const revalidate = 300;
 
@@ -50,6 +51,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const data = await playerById(Number(id));
   if (!data) notFound();
+  const status = await playerInjury(Number(id));
   const { player, teams, log } = data;
   const soccer = player.sportId === "soccer";
   const current = teams[0];
@@ -98,6 +100,8 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           ) : null}
         </div>
       </div>
+
+      {status ? <PlayerStatusNote row={status} /> : null}
 
       <dl className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {[

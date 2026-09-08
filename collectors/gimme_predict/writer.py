@@ -259,6 +259,46 @@ class PredictionWriter:
                     mean=s.expected_goals,
                     explanation=s.explanation,
                 )
+                self._subject_prediction(
+                    cur,
+                    run_id,
+                    s.game_id,
+                    "anytime_assist",
+                    "player",
+                    s.player_id,
+                    "yes",
+                    probability=s.assist_probability,
+                    mean=s.expected_assists,
+                    explanation=s.explanation,
+                )
+                if s.expected_sot > 0:
+                    self._subject_prediction(
+                        cur,
+                        run_id,
+                        s.game_id,
+                        "player_shots_on_target",
+                        "player",
+                        s.player_id,
+                        "",
+                        mean=s.expected_sot,
+                        explanation=s.explanation,
+                    )
+                    for selection, probability, line in (
+                        ("over 0.5", s.sot_probability, 0.5),
+                        ("over 1.5", s.sot_two_probability, 1.5),
+                    ):
+                        self._subject_prediction(
+                            cur,
+                            run_id,
+                            s.game_id,
+                            "player_shots_on_target",
+                            "player",
+                            s.player_id,
+                            selection,
+                            probability=probability,
+                            mean=s.expected_sot,
+                            line=line,
+                        )
         self.conn.commit()
 
     def _subject_prediction(

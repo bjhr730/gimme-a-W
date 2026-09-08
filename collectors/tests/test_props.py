@@ -204,14 +204,19 @@ def test_soccer_props_counts_and_scorers():
     match = next(c for c in counts if c.market == "match_corners")
     assert match.team_id is None and match.mean > 5
 
-    # scorers: striker with goals gets the highest probability
+    # players: the striker scores most, the playmaker assists most.
+    # A full lineup is used so the squad is completely on record; see the thin
+    # squad case below for what happens when it is not.
+    squad = [
+        # id, goals, shots, shots on target, assists, starter
+        (11, 1, 4, 2, 0, 1),
+        (12, 0, 1, 0.5, 1, 1),
+        (13, 0, 0.5, 0.25, 0, 0),
+    ]
+    squad += [(20 + i, 0, 0.5, 0.25, 0, 1) for i in range(9)]
     lineup_rows = []
     for k in range(8):
-        for pid, goals, shots, start in (
-            (11, 1 if k % 2 == 0 else 0, 4, 1),
-            (12, 0, 1, 1),
-            (13, 0, 0.5, 0),
-        ):
+        for pid, goals, shots, sot, assists, start in squad:
             lineup_rows.append(
                 PlayerGame(
                     game_id=k + 1,
@@ -224,17 +229,65 @@ def test_soccer_props_counts_and_scorers():
                     name=f"P{pid}",
                     position="F",
                     stats={
-                        "totalGoals": goals,
+                        "totalGoals": goals if pid != 11 or k % 2 == 0 else 0,
                         "totalShots": shots,
+                        "shotsOnTarget": sot,
+                        "goalAssists": assists,
                         "starter": bool(start),
                         "subbedIn": not start,
                     },
                 )
             )
     threat = soccer_props.player_threat(lineup_rows)
-    roster = [{"player_id": p, "full_name": f"P{p}", "position": "F"} for p in (11, 12, 13)]
-    scorers = soccer_props.predict_scorers(
-        g, team_id=1, team_xg=1.8, roster=roster, threat=threat, team_games_window=8
+    roster = [{"player_id": pid, "full_name": f"P{pid}", "position": "F"} for pid, *_ in squad]
+    players = soccer_props.predict_players(
+        g,
+        team_id=1,
+        team_xg=1.8,
+        team_sot=4.5,
+        roster=roster,
+        threat=threat,
+        team_games_window=8,
     )
-    assert scorers[0].player_id == 11 and 0.3 < scorers[0].probability < 0.9
-    assert abs(sum(s.expected_goals for s in scorers) - 1.8) < 0.3
+    assert players[0].player_id == 11 and 0.2 < players[0].probability < 0.9
+    # with the whole squad on record the parts add back to the team totals
+    assert abs(sum(s.expected_goals for s in players) - 1.8) < 0.25
+    assert abs(sum(s.expected_sot for s in players) - 4.5) < 0.25
+    assert abs(sum(s.expected_assists for s in players) - 1.8 * soccer_props.ASSIST_RATE) < 0.25
+    striker = next(s for s in players if s.player_id == 11)
+    playmaker = next(s for s in players if s.player_id == 12)
+    assert striker.expected_sot > playmaker.expected_sot
+    assert playmaker.expected_assists > striker.expected_assists
+    # two or more shots on target is never likelier than one or more
+    assert striker.sot_probability > striker.sot_two_probability > 0
+    assert striker.explanation["squad_covered"] == 1.0
+
+    # a player reported out takes no share; the rest of the squad absorbs it
+    without = soccer_props.predict_players(
+        g,
+        team_id=1,
+        team_xg=1.8,
+        team_sot=4.5,
+        roster=roster,
+        threat=threat,
+        team_games_window=8,
+        play_probability={11: 0.0},
+    )
+    assert all(s.player_id != 11 for s in without)
+    assert next(s for s in without if s.player_id == 12).expected_goals > playmaker.expected_goals
+
+    # only three players on record: the unknown rest of the squad still takes a
+    # share, so nobody is credited with the whole team's goals
+    thin = soccer_props.predict_players(
+        g,
+        team_id=1,
+        team_xg=1.8,
+        team_sot=4.5,
+        roster=roster[:3],
+        threat=threat,
+        team_games_window=8,
+    )
+    assert sum(s.expected_goals for s in thin) < 0.9
+    thin_striker = next(s for s in thin if s.player_id == 11)
+    assert thin_striker.probability < striker.probability
+    assert thin_striker.explanation["squad_covered"] < 0.5
