@@ -6,6 +6,7 @@ gimme-collect run espn --kind roster --league nfl
 gimme-collect run nflverse --seasons 2015-2026 --what games,players
 gimme-collect run fdcouk --league eng.1 --league esp.1 --seasons 2015-2025
 gimme-collect derive --what form,elo
+gimme-collect live
 """
 
 from __future__ import annotations
@@ -124,6 +125,10 @@ def _build_parser() -> argparse.ArgumentParser:
     derive.add_argument("--what", default="form,elo", help="form | elo (comma separated)")
 
     sub.add_parser("health", help="exit 1 when the pipeline is stale or a run failed")
+    sub.add_parser(
+        "live",
+        help="refresh scores for competitions with a game on right now, and nothing else",
+    )
     return parser
 
 
@@ -299,6 +304,40 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_live() -> int:
+    """Scores only, only where a ball is in play.
+
+    The daily passes leave a match played between them frozen at its pre-kickoff
+    state. This is meant to run often, so it asks the database what is actually on
+    before touching the network: on a quiet hour it makes no requests at all.
+    """
+    cfg = settings()
+    if not cfg.database_url:
+        print("DATABASE_URL is not set.", file=sys.stderr)
+        return 2
+    from gimme_collectors import live
+
+    slugs = live.active_competitions(cfg.database_url)
+    if not slugs:
+        print("Nothing in play; no requests made.")
+        return 0
+    print(f"In play: {', '.join(slugs)}")
+    args = argparse.Namespace(
+        source="espn",
+        kind="scoreboard",
+        what="games,players",
+        league=slugs,
+        date="today",
+        days=1,
+        seasons="current",
+        dry_run=False,
+        json=False,
+        # scores go stale in minutes, so never serve them from the disk cache
+        no_cache=True,
+    )
+    return cmd_run(args)
+
+
 def cmd_derive(args: argparse.Namespace) -> int:
     cfg = settings()
     if not cfg.database_url:
@@ -339,6 +378,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(args)
     if args.command == "derive":
         return cmd_derive(args)
+    if args.command == "live":
+        return cmd_live()
     if args.command == "health":
         cfg = settings()
         if not cfg.database_url:

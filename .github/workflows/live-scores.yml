@@ -1,0 +1,46 @@
+name: Live scores
+
+# The full collection runs four times a day, which leaves a match played between
+# passes frozen at its pre-kickoff state: a tie that kicked off at 16:45 still
+# read 0-0 with no clock at 18:16. This job refreshes scores only, and only for
+# competitions with a ball actually in play.
+#
+# The repository is private, so Actions minutes are capped. Two things keep this
+# cheap: `gimme-collect live` asks the database what is on before touching the
+# network and exits in seconds when nothing is, and the dependency cache means a
+# quiet run costs well under a minute. Widen the schedule if the budget allows;
+# a public repository would remove the limit entirely.
+
+on:
+  schedule:
+    # Every 20 minutes through the European evening, which is where most of the
+    # slate sits. That is 21 runs a day, roughly 630 minutes a month against the
+    # 2,000 a private repository gets, which leaves room for the daily pipeline.
+    # Widen the hours or shorten the interval only with that budget in mind: a
+    # public repository has no limit and could poll every five minutes.
+    - cron: "*/20 17-23 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: live-scores
+  cancel-in-progress: true
+
+jobs:
+  scores:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: collectors
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      COLLECTOR_USER_AGENT: ${{ vars.COLLECTOR_USER_AGENT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen --no-dev
+      - name: Refresh scores for whatever is in play
+        run: uv run gimme-collect live

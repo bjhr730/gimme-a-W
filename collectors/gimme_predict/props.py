@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -22,6 +22,11 @@ from gimme_predict.players import (
     rostered_anywhere,
     walk_football,
 )
+
+# How far back an appearance can stand in for a roster row. Long enough to cover
+# a player who has been out injured, short enough that last season's squad does
+# not come back.
+LINEUP_FALLBACK_WINDOW = timedelta(days=75)
 
 
 @dataclass
@@ -243,8 +248,16 @@ def predict_soccer(
         }
         out.withheld += sum(1 for st in statuses.values() if st.out)
         out.flagged += sum(1 for st in statuses.values() if st.doubt)
-        # players in recent lineups count as rostered even without a roster pull
-        for pg in player_rows[-4000:]:
+        # A club with no roster pull still needs markets, so a recent appearance can
+        # stand in for a roster row. Two limits keep last season's squad out: the
+        # player must not be registered anywhere, since the roster already knows
+        # where he is, and the appearance must be recent enough to mean something.
+        cutoff = datetime.now(UTC) - LINEUP_FALLBACK_WINDOW
+        recent = [pg for pg in player_rows if pg.kickoff >= cutoff]
+        registered = rostered_anywhere(conn, sorted({pg.player_id for pg in recent}))
+        for pg in recent:
+            if pg.player_id in registered:
+                continue
             lst = rosters.setdefault(pg.team_id, [])
             if all(r["player_id"] != pg.player_id for r in lst):
                 lst.append(
