@@ -87,6 +87,8 @@ export function PredictionPanel({
   const hLabel = home.abbreviation ?? home.shortName ?? home.name;
   const aLabel = away.abbreviation ?? away.shortName ?? away.name;
 
+  // true once we know a closing total exists to compare the model against
+  let showTotalsCaveat = false;
   let bar: React.ReactNode = null;
   const details: { label: string; value: string; sub?: string }[] = [];
   if (soccer) {
@@ -102,6 +104,7 @@ export function PredictionPanel({
     if (btts) details.push({ label: "Both teams score", value: pct(btts.probability) });
   } else {
     const ph = Number(find("win_probability", "home")?.probability ?? 0);
+    // set below when a closing total exists to compare against
     bar = <Bar home={ph} away={1 - ph} labelHome={hLabel} labelAway={aLabel} />;
     const spread = find("spread", "home");
     const total = find("total_points", "");
@@ -116,15 +119,28 @@ export function PredictionPanel({
       });
     }
     if (total) {
+      // The spread between this and the line reads as a disagreement until you
+      // see the range, which is wide enough to swallow most of it.
+      const q = (total.quantiles ?? {}) as { p25?: number; p75?: number };
+      const parts = [
+        total.line !== null ? `market ${Number(total.line).toFixed(1)}` : null,
+        q.p25 !== undefined && q.p75 !== undefined
+          ? `middle half ${Math.round(Number(q.p25))}–${Math.round(Number(q.p75))}`
+          : null,
+      ].filter(Boolean);
       details.push({
         label: "Expected total",
         value: Number(total.mean).toFixed(1),
-        sub: total.line !== null ? `market ${Number(total.line).toFixed(1)}` : undefined,
+        sub: parts.length ? parts.join(" · ") : undefined,
       });
+      showTotalsCaveat = total.line !== null;
     }
   }
   const reasons = explain(e, home, away, soccer);
   const model = rows[0];
+  const footnote = showTotalsCaveat
+    ? "Probabilities, not promises. Back-tested against the closing line; see the models page. On totals the line is still the sharper number, so read a gap as disagreement, not an edge."
+    : "Probabilities, not promises. Back-tested against the closing line; see the models page.";
 
   return (
     <section className="mt-4 rounded-md border-2 border-pitch/60 bg-surface p-4">
@@ -156,9 +172,7 @@ export function PredictionPanel({
           ))}
         </ul>
       ) : null}
-      <p className="mt-3 text-xs text-muted">
-        Probabilities, not promises. Back-tested against the closing line; see the models page.
-      </p>
+      <p className="mt-3 text-xs text-muted">{footnote}</p>
     </section>
   );
 }

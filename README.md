@@ -171,6 +171,17 @@ playing. Each run records how many players it withheld and flagged.
 - Totals, corners, shots: MAE at or below the market's implied line.
 - Yards: 50 % of outcomes inside the predicted 25th–75th percentile range.
 
+**Where we do not clear the bar: NFL totals.** Measured over 2,494 games with a
+closing line, the model's total is unbiased (mean error −0.04 points) but less
+accurate than the line: MAE 10.87 against 10.51. Blending the two helps at no
+weight — the best mix is 100 % market — and anchoring the model on the line
+reproduces it, landing within 0.42 points of it and beating it in 50.1 % of
+games. Scoring rates and Elo are already in the price. Beating an NFL total
+needs inputs we do not collect: pace, pass rate over expected, personnel
+groupings, and injuries to specific skill players. Until then the published
+total is shown with its middle-half range and the game page says the line is the
+sharper number, so a gap reads as disagreement rather than an edge.
+
 Predictions are probabilities, not promises. The UI always shows the uncertainty.
 
 ---
