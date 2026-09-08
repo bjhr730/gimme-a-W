@@ -181,6 +181,16 @@ def standings_url(lg: League) -> str:
 # --------------------------------------------------------------- helpers
 
 _SEASON_LABEL = re.compile(r"(\d{4})-(\d{2})")
+_SEASON_LABEL_LONG = re.compile(r"(\d{4})-(\d{4})")
+
+
+def season_label_from(text: str) -> str | None:
+    """'2026-27 English Premier League' -> '2026-27'; '2020-2021-spanish-laliga' -> '2020-21'."""
+    long = _SEASON_LABEL_LONG.search(text)
+    if long:
+        return f"{long.group(1)}-{long.group(2)[2:]}"
+    short = _SEASON_LABEL.search(text)
+    return short.group(0) if short else None
 
 
 def _num(value: Any) -> Any:
@@ -232,8 +242,7 @@ def season_from(node: dict[str, Any], fallback_year: int | None = None) -> Seaso
         s = {"year": s}
     year = int(s.get("year") or fallback_year or datetime.now(UTC).year)
     display = str(s.get("displayName") or node.get("seasonDisplayName") or "")
-    match = _SEASON_LABEL.search(display)
-    label = match.group(0) if match else str(year)
+    label = season_label_from(display) or str(year)
     return SeasonRef(
         label=label,
         year=year,
@@ -261,8 +270,11 @@ def event_season(ev: dict[str, Any], league_season: SeasonRef) -> SeasonRef:
     year = _int(s.get("year"))
     if year is None or year == league_season.year:
         return league_season
-    match = _SEASON_LABEL.search(str(s.get("slug") or ""))
-    label = match.group(0) if match else str(year)
+    label = season_label_from(str(s.get("slug") or ""))
+    if label is None:
+        # split-year league (its current label is '2026-27') whose old slug lacks the years
+        split_year = "-" in league_season.label
+        label = f"{year}-{(year + 1) % 100:02d}" if split_year else str(year)
     return SeasonRef(label=label, year=year)
 
 

@@ -43,6 +43,9 @@ jobs:
             --league "${{ github.event.inputs.league || 'all' }}" \
             --date "${{ github.event.inputs.date || 'yesterday' }}" \
             --days "${{ github.event.inputs.days || '3' }}"
+      - name: Fixtures for the next ten days (one range request per league)
+        if: always()
+        run: uv run gimme-collect run espn --kind scoreboard --league all --date today --days 10
       - name: Recompute team form and Elo ratings
         if: always()
         run: uv run gimme-collect derive --what form,elo

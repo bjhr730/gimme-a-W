@@ -142,8 +142,17 @@ def test_event_season_in_range_responses():
         {"season": {"year": 2019, "slug": "2019-20-english-premier-league"}}, league
     )
     assert old.label == "2019-20" and old.year == 2019
-    mls = espn.event_season({"season": {"year": 2024, "slug": "regular-season"}}, league)
+    mls_league = espn.SeasonRef(label="2026", year=2026)
+    mls = espn.event_season({"season": {"year": 2024, "slug": "regular-season"}}, mls_league)
     assert mls.label == "2024"
+    # some leagues spell the slug with two full years
+    liga = espn.event_season({"season": {"year": 2020, "slug": "2020-2021-spanish-laliga"}}, league)
+    assert liga.label == "2020-21"
+    # a slug without years in a split-year league still gets a split-year label
+    serie = espn.event_season({"season": {"year": 2022, "slug": "italian-serie-a"}}, league)
+    assert serie.label == "2022-23"
+    calendar = espn.SeasonRef(label="2026", year=2026)
+    assert espn.event_season({"season": {"year": 2024, "slug": "x"}}, calendar).label == "2024"
     assert espn.event_season({"season": {"year": 2026}}, league) is league
     assert espn.scoreboard_url(espn.league("eng.1"), date(2019, 8, 1), date(2019, 8, 31)).endswith(
         "/soccer/eng.1/scoreboard?dates=20190801-20190831&limit=1000"
