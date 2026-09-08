@@ -176,15 +176,27 @@ class Writer:
     def _bind_external(
         self, cur: Cursor, entity_type: str, entity_id: int, external_id: str
     ) -> None:
-        cur.execute(
-            """
-            INSERT INTO external_id (entity_type, entity_id, source_id, external_id)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (entity_type, source_id, external_id)
-                DO UPDATE SET entity_id = EXCLUDED.entity_id
-            """,
-            (entity_type, entity_id, self.source_id, external_id),
-        )
+        # A venue matched by name may already carry a different id from this source
+        # (stadiums get new ESPN ids when renamed); keep the first binding then.
+        if entity_type == "venue":
+            cur.execute(
+                """
+                INSERT INTO external_id (entity_type, entity_id, source_id, external_id)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (entity_type, entity_id, self.source_id, external_id),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO external_id (entity_type, entity_id, source_id, external_id)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (entity_type, source_id, external_id)
+                    DO UPDATE SET entity_id = EXCLUDED.entity_id
+                """,
+                (entity_type, entity_id, self.source_id, external_id),
+            )
         self._id_cache[(entity_type, external_id)] = entity_id
 
     # ----------------------------------------------------------- reference

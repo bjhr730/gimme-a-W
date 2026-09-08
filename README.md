@@ -256,6 +256,9 @@ History loads (one-off, then refreshed weekly by the workflow):
 ```bash
 uv run gimme-collect run nflverse --seasons 2015-2026 --what games
 uv run gimme-collect run nflverse --seasons 2024-2025 --what players
+# soccer seasons from ESPN: one request per calendar month, results + shots + corners
+uv run gimme-collect run espn --kind scoreboard --league eng.1 --date 2019-08-01 --days 2555
+# closing odds from football-data.co.uk (when the site is up)
 uv run gimme-collect run fdcouk --league eng.1 --league esp.1 --seasons 2015-2025
 ```
 
@@ -288,7 +291,7 @@ Never commit `.env`. Commit `.env.example` with empty values instead.
 | **3 — Depth** (done, ESPN part) | ESPN game summaries (full team box scores, per-player passing/rushing/receiving and goals/shots, soccer lineups, FPI picks) · ESPN rosters · `team_form` and Elo `rating` derivations · player pages, box scores on game pages, form/Elo/roster on team pages · weekly roster workflow |
 | **3b — Historical depth** (done) | nflverse: NFL games since 2015 with closing lines, weather and rest days, weekly player stats with EPA and target share · football-data.co.uk: league seasons with shots on target, corners and Bet365/Pinnacle opening and closing odds, matched to ESPN teams by name · Elo with season regression · weekly refresh workflow. CFBD when a key is added; Sports-Reference last, under its rate limit |
 | **4 — Game predictions** (done) | `gimme_predict`: point-in-time features (Elo, rest, form), logistic win probability + ridge spread and total for football, Dixon-Coles Poisson for soccer (1X2, total goals, team goals, both teams to score), 60/40 blend with the market, season-by-season back-test vs the closing line stored in `model_run`, daily prediction run · "Who gets the W" panel on game pages, model pick chips on score cards, `/models` page |
-| **5 — Team and player markets** | Shots on target, corners, anytime goalscorer, anytime TD, passing/rushing/receiving yards · explanation panel per prediction |
+| **5 — Team and player markets** (done) | Passing/rushing/receiving yards with middle-half ranges and anytime TD (usage share, opponent allowed, market game script; holdout back-test), shots on target and corners per team and per match (negative-binomial GLM with over/under lines), anytime scorer from expected-goals share · markets panel on game pages · daily run |
 | **6 — Production** | Vercel + Neon + GitHub secrets · daily collect and predict workflows · monitoring of collector runs and model drift |
 
 ---
