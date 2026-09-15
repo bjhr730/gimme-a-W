@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo/logo.svg" alt="Gimme a W" width="440">
+  <img src="assets/logo/gaw-logo.svg" alt="Gimme a W" width="200">
 </p>
 
 # gimme-a-W
@@ -236,7 +236,7 @@ gimme-a-W/
 ├── packages/
 │   └── db/                      # Drizzle schema, migrations, seed
 ├── .github/workflows/           # ci.yml · collect-daily.yml · predict-daily.yml · backtest-weekly.yml
-├── assets/logo/                 # logo.svg (lockup with wordmark) · mark.svg (bird only, for favicon/app icon)
+├── assets/logo/                 # gaw-logo.svg (the logo, square, source of the app icons) · mark.svg (bird and dollar sign, for the site header)
 ├── data/                        # local raw cache and model artifacts (git-ignored)
 ├── README.md
 └── .gitignore

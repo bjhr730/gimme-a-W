@@ -1,34 +1,39 @@
-// Rasterize the bird mark into PWA icons. Run once: pnpm --filter web icons
+// Build the PWA icons from the logo. Run after changing it: pnpm --filter web icons
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 
 const root = path.resolve(import.meta.dirname, "..");
-const svg = await readFile(path.resolve(root, "../../assets/logo/mark.svg"));
+const assets = path.resolve(root, "../../assets/logo");
+const logo = await readFile(path.join(assets, "gaw-logo.svg"));
+const mark = await readFile(path.join(assets, "mark.svg"));
 const out = path.join(root, "public");
 await mkdir(out, { recursive: true });
 
-// The mark is wide (1300x820). Icons are square: pad on a pitch-green ground,
-// bird centered, with safe-zone margin so maskable icons don't clip the beak.
-const ground = { r: 29, g: 122, b: 70, alpha: 1 };
+// The logo is already square and carries its own ground, so the plain icons are
+// just a resize. Nothing to pad or centre.
 for (const size of [192, 512]) {
-  const inner = Math.round(size * 0.78);
-  const bird = await sharp(svg).resize({ width: inner, fit: "inside" }).png().toBuffer();
-  const meta = await sharp(bird).metadata();
-  const png = await sharp({
-    create: { width: size, height: size, channels: 4, background: ground },
-  })
-    .composite([
-      {
-        input: bird,
-        left: Math.round((size - (meta.width ?? inner)) / 2),
-        top: Math.round((size - (meta.height ?? inner)) / 2),
-      },
-    ])
-    .png()
-    .toBuffer();
+  const png = await sharp(logo).resize(size, size).png().toBuffer();
   await writeFile(path.join(out, `icon-${size}.png`), png);
   console.log(`icon-${size}.png`);
 }
-await writeFile(path.join(out, "mark.svg"), svg);
+
+// A maskable icon is cropped by the launcher to whatever shape the phone likes,
+// so anything inside the outer tenth can be cut off. The logo reaches its edges:
+// the dollar sign on one side, "GaW" near the bottom. Nesting it at 80% inside a
+// full-bleed copy of its own ground keeps every part of it inside the safe zone,
+// and the ring that gets cropped still looks like the logo rather than a border.
+const inset = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 380 380">
+  <rect width="380" height="380" fill="#DDE0E4"/>
+  ${Buffer.from(logo)
+    .toString("utf8")
+    .replace(/^<svg /, '<svg x="38" y="38" width="304" height="304" ')
+    .replace(/ width="1024" height="1024"/, "")}
+</svg>`;
+const maskable = await sharp(Buffer.from(inset)).resize(512, 512).png().toBuffer();
+await writeFile(path.join(out, "icon-512-maskable.png"), maskable);
+console.log("icon-512-maskable.png");
+
+// The header shows the mark on the page's own background, so it stays SVG.
+await writeFile(path.join(out, "mark.svg"), mark);
 console.log("mark.svg");
