@@ -24,7 +24,9 @@ export const metadata: Metadata = {
   applicationName: "Gimme a W",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Gimme a W" },
-  icons: { apple: "/icon-192.png" },
+  // declaring any icon here replaces the app/icon.svg file convention, so the
+  // favicon has to be named too or nothing links it
+  icons: { icon: "/icon.svg", apple: "/icon-192.png" },
 };
 
 export const viewport: Viewport = {
