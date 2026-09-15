@@ -13,7 +13,7 @@ export function Nav() {
           <Link href="/" className="flex min-w-0 items-center gap-2" aria-label="Gimme a W home">
             {/* nearly square, where the old mark was wide, so it needs the extra
                 height to read at this size */}
-            <img src="/mark.svg" alt="" width={246} height={262} className="h-9 w-auto" />
+            <img src="/mark.svg" alt="" width={246} height={282} className="h-9 w-auto" />
             <span className="display truncate text-xl font-extrabold leading-none sm:text-2xl">
               Gimme a <span className="text-pitch">W</span>
             </span>

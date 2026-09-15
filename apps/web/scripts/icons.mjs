@@ -45,7 +45,9 @@ console.log("icon-512-maskable.png");
 // The dollar sign is a <text> element like the wordmark is, so the wordmark has
 // to be matched by its position rather than its tag, or the crop loses the sign.
 const wordmark = /<text x="14[04]" y="32[26]"[\s\S]*?<\/text>/g;
-const [x, y, side] = [70, 96, 256];
+// The box has to clear the dollar sign, and that is a text glyph: its top sits
+// wherever the renderer's fallback font puts it, above the logo's own drawing.
+const [x, y, side] = [58, 68, 280];
 const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${side} ${side}" role="img" aria-label="Gimme a W">
 ${defs}<rect x="${x}" y="${y}" width="${side}" height="${side}" fill="url(#silver)"/>${drawing.replace(wordmark, "")}
 </svg>
