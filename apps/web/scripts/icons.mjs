@@ -6,7 +6,6 @@ import sharp from "sharp";
 const root = path.resolve(import.meta.dirname, "..");
 const assets = path.resolve(root, "../../assets/logo");
 const logo = await readFile(path.join(assets, "gaw-logo.svg"));
-const mark = await readFile(path.join(assets, "mark.svg"));
 const out = path.join(root, "public");
 await mkdir(out, { recursive: true });
 
@@ -37,24 +36,11 @@ const maskable = await sharp(Buffer.from(inset)).resize(512, 512).png().toBuffer
 await writeFile(path.join(out, "icon-512-maskable.png"), maskable);
 console.log("icon-512-maskable.png");
 
-// The favicon gets a tab square 16 pixels wide. The whole logo at that size is a
-// grey smudge, so it is cropped to the part that carries the identity -- the bird
-// on its perch, and the dollar sign -- on the same silver ground, with the "GaW"
-// and the ruled lines dropped. Same artwork, close enough to read.
-//
-// The dollar sign is a <text> element like the wordmark is, so the wordmark has
-// to be matched by its position rather than its tag, or the crop loses the sign.
-const wordmark = /<text x="14[04]" y="32[26]"[\s\S]*?<\/text>/g;
-// The box has to clear the dollar sign, and that is a text glyph: its top sits
-// wherever the renderer's fallback font puts it, above the logo's own drawing.
-const [x, y, side] = [58, 68, 280];
-const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${side} ${side}" role="img" aria-label="Gimme a W">
-${defs}<rect x="${x}" y="${y}" width="${side}" height="${side}" fill="url(#silver)"/>${drawing.replace(wordmark, "")}
-</svg>
-`;
-await writeFile(path.join(root, "src/app/icon.svg"), favicon);
+// The logo goes everywhere whole: the tab, the header, the launcher. It carries
+// its own ground, so the only thing stripped is the C2PA metadata block, which is
+// two thirds of the file and means nothing to a browser.
+const plain = source.replace(/<metadata>[\s\S]*?<\/metadata>/, "");
+await writeFile(path.join(root, "src/app/icon.svg"), plain);
 console.log("src/app/icon.svg");
-
-// The header shows the mark on the page's own background, so it stays SVG.
-await writeFile(path.join(out, "mark.svg"), mark);
-console.log("mark.svg");
+await writeFile(path.join(out, "logo.svg"), plain);
+console.log("logo.svg");

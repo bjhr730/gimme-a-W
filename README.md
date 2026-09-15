@@ -236,7 +236,7 @@ gimme-a-W/
 ├── packages/
 │   └── db/                      # Drizzle schema, migrations, seed
 ├── .github/workflows/           # ci.yml · collect-daily.yml · predict-daily.yml · backtest-weekly.yml
-├── assets/logo/                 # gaw-logo.svg (the logo, square, source of the app icons) · mark.svg (bird and dollar sign, for the site header)
+├── assets/logo/                 # gaw-logo.svg — the logo; the header, the favicon and the app icons are all built from it
 ├── data/                        # local raw cache and model artifacts (git-ignored)
 ├── README.md
 └── .gitignore

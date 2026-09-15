@@ -11,9 +11,13 @@ export function Nav() {
         <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-2 sm:gap-3 sm:px-5">
           <BackButton />
           <Link href="/" className="flex min-w-0 items-center gap-2" aria-label="Gimme a W home">
-            {/* nearly square, where the old mark was wide, so it needs the extra
-                height to read at this size */}
-            <img src="/mark.svg" alt="" width={246} height={282} className="h-9 w-auto" />
+            <img
+              src="/logo.svg"
+              alt=""
+              width={380}
+              height={380}
+              className="h-9 w-9 shrink-0 rounded-md"
+            />
             <span className="display truncate text-xl font-extrabold leading-none sm:text-2xl">
               Gimme a <span className="text-pitch">W</span>
             </span>
