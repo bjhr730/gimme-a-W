@@ -37,6 +37,18 @@ const maskable = await sharp(Buffer.from(inset)).resize(512, 512).png().toBuffer
 await writeFile(path.join(out, "icon-512-maskable.png"), maskable);
 console.log("icon-512-maskable.png");
 
+// The favicon gets a tab square 16 pixels wide. The whole logo at that size is a
+// grey smudge, so it is cropped to the part that carries the identity -- the bird
+// on its perch, and the dollar sign -- on the same silver ground, with the "GaW"
+// and the ruled lines dropped. Same artwork, close enough to read.
+const crop = "76 100 258 258";
+const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${crop}" role="img" aria-label="Gimme a W">
+${defs}<rect x="76" y="100" width="258" height="258" fill="url(#silver)"/>${drawing.replace(/<text[\s\S]*?<\/text>/g, "")}
+</svg>
+`;
+await writeFile(path.join(root, "src/app/icon.svg"), favicon);
+console.log("src/app/icon.svg");
+
 // The header shows the mark on the page's own background, so it stays SVG.
 await writeFile(path.join(out, "mark.svg"), mark);
 console.log("mark.svg");
