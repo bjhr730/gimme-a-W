@@ -41,9 +41,13 @@ console.log("icon-512-maskable.png");
 // grey smudge, so it is cropped to the part that carries the identity -- the bird
 // on its perch, and the dollar sign -- on the same silver ground, with the "GaW"
 // and the ruled lines dropped. Same artwork, close enough to read.
-const crop = "76 100 258 258";
-const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${crop}" role="img" aria-label="Gimme a W">
-${defs}<rect x="76" y="100" width="258" height="258" fill="url(#silver)"/>${drawing.replace(/<text[\s\S]*?<\/text>/g, "")}
+//
+// The dollar sign is a <text> element like the wordmark is, so the wordmark has
+// to be matched by its position rather than its tag, or the crop loses the sign.
+const wordmark = /<text x="14[04]" y="32[26]"[\s\S]*?<\/text>/g;
+const [x, y, side] = [70, 96, 256];
+const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${side} ${side}" role="img" aria-label="Gimme a W">
+${defs}<rect x="${x}" y="${y}" width="${side}" height="${side}" fill="url(#silver)"/>${drawing.replace(wordmark, "")}
 </svg>
 `;
 await writeFile(path.join(root, "src/app/icon.svg"), favicon);

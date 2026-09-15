@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="76 100 258 258" role="img" aria-label="Gimme a W">
-<defs><linearGradient id="silver" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4F5F7"/><stop offset="0.3" stop-color="#B9BDC3"/><stop offset="0.55" stop-color="#E9EBEE"/><stop offset="0.8" stop-color="#A3A8AF"/><stop offset="1" stop-color="#D5D8DC"/></linearGradient></defs><rect x="76" y="100" width="258" height="258" fill="url(#silver)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="70 96 256 256" role="img" aria-label="Gimme a W">
+<defs><linearGradient id="silver" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4F5F7"/><stop offset="0.3" stop-color="#B9BDC3"/><stop offset="0.55" stop-color="#E9EBEE"/><stop offset="0.8" stop-color="#A3A8AF"/><stop offset="1" stop-color="#D5D8DC"/></linearGradient></defs><rect x="70" y="96" width="256" height="256" fill="url(#silver)"/>
 <path d="M112 198 L96 302" fill="none" stroke="#1450A8" stroke-width="4" stroke-linecap="round"/>
 <path d="M124 200 L118 310" fill="none" stroke="#1450A8" stroke-width="4" stroke-linecap="round"/>
 <ellipse cx="94" cy="310" rx="9" ry="15" fill="#1E6FD9"/>
@@ -25,7 +25,7 @@
 <circle cx="205" cy="133" r="3" fill="#16202C"/>
 <path d="M222 128 L256 124 L223 137 Z" fill="#16202C"/>
 <path d="M222 143 L252 154 L221 150 Z" fill="#16202C"/>
-
+<text x="284" y="166" text-anchor="middle" fill="#E0A100" stroke="#C98A00" stroke-width="1.5" paint-order="stroke" font-size="84" font-weight="700" font-family="Arial Black, Arial, Liberation Sans, DejaVu Sans, sans-serif">$</text>
 
 
 
