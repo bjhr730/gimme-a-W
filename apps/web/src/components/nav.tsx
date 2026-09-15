@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BackButton } from "./back-button";
+import { InstallButton } from "./install-button";
 import { NavLinks } from "./nav-links";
 import { SearchBox } from "./search-box";
 import { ThemeToggle } from "./theme-toggle";
@@ -26,6 +27,7 @@ export function Nav() {
             <NavLinks variant="top" />
           </nav>
           <div className="ml-auto flex items-center gap-2 md:ml-3">
+            <InstallButton />
             <ThemeToggle />
             <SearchBox variant="header" />
           </div>
