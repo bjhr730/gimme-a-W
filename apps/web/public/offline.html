@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Offline · Gimme a W</title>
+    <link rel="icon" href="/icon.svg" />
+    <style>
+      /* The same tokens as the app, inlined: this page is served by the service
+         worker when the network is gone, so it cannot fetch a stylesheet. */
+      :root {
+        color-scheme: light dark;
+        --ground: light-dark(#f2f4f0, #0f1613);
+        --surface: light-dark(#ffffff, #171f1a);
+        --ink: light-dark(#14211a, #e6ebe6);
+        --ink-2: light-dark(#4b5a51, #b4c0b7);
+        --line: light-dark(#d3dad3, #2a3630);
+        --pitch: light-dark(#1d7a46, #3fb26f);
+      }
+      :root[data-theme="light"] { color-scheme: light; }
+      :root[data-theme="dark"] { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: var(--ground);
+        color: var(--ink);
+        font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      main { max-width: 22rem; text-align: center; }
+      img { width: 72px; height: 72px; border-radius: 12px; }
+      h1 {
+        margin: 20px 0 8px;
+        font: 800 2rem/1 "Arial Narrow", Impact, system-ui, sans-serif;
+        letter-spacing: 0.01em;
+        text-transform: uppercase;
+      }
+      p { margin: 0 0 24px; color: var(--ink-2); }
+      button {
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--pitch);
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 20px;
+        cursor: pointer;
+      }
+      button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+      small { display: block; margin-top: 20px; color: var(--ink-2); border-top: 1px solid var(--line); padding-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <script>
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+    <main>
+      <img src="/logo.svg" alt="Gimme a W" width="72" height="72" />
+      <h1>No connection</h1>
+      <p>Scores go stale fast, so this app does not keep a copy. Reconnect and it will load the live ones.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+      <small>Gimme a W</small>
+    </main>
+  </body>
+</html>

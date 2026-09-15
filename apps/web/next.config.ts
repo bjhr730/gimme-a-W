@@ -20,7 +20,15 @@ const nextConfig: NextConfig = {
     remotePatterns: [{ protocol: "https", hostname: "a.espncdn.com" }],
   },
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      { source: "/(.*)", headers: securityHeaders },
+      // A worker cached by the browser would pin an old one in place; browsers
+      // revalidate it on their own schedule, and this makes that schedule now.
+      {
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+    ];
   },
 };
 

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Barlow_Condensed, Source_Sans_3 } from "next/font/google";
 import { BackToTop } from "@/components/back-to-top";
 import { Nav } from "@/components/nav";
+import { ServiceWorker } from "@/components/service-worker";
 import "./globals.css";
 
 const display = Barlow_Condensed({
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
         <BackToTop />
+        <ServiceWorker />
       </body>
     </html>
   );
