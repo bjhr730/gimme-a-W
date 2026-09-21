@@ -20,6 +20,13 @@ from gimme_predict.data import Game
 
 ROLL_N = 8
 
+# How far back the loaders read. Form is a rolling window of ROLL_N games and the
+# fitted models want a few seasons behind that, not the whole archive: four years
+# covers three complete seasons plus the one in progress in every competition
+# here. The unbounded read is what put the database over its transfer allowance --
+# it walked every final game ever recorded, per competition, four times a day.
+HISTORY_DAYS = 4 * 365
+
 
 @dataclass
 class PlayerGame:
@@ -39,6 +46,8 @@ def load_player_games(
     conn: psycopg.Connection[Any],
     competition_slug: str | None = None,
     team_ids: list[int] | None = None,
+    *,
+    history_days: int | None = HISTORY_DAYS,
 ) -> list[PlayerGame]:
     """Per-player box-score rows in kickoff order, for one competition or one set of clubs.
 
@@ -46,17 +55,27 @@ def load_player_games(
     in. That is what a cup tie needs: the Champions League has no season of its
     own on record in September, while the clubs in it have played a league month
     already, and a striker's rate does not reset when he plays in Europe.
+
+    Two things keep this off the wire. The stats column is an ESPN box score --
+    forty-odd keys per row, of which the models read seventeen -- so the ones that
+    matter are picked out in SQL and the rest never leave the server. And history
+    is bounded: without `history_days` this walks every final game ever recorded,
+    on every run, for every competition. Pass None to read the lot (backtests).
     """
     if not competition_slug and not team_ids:
         raise ValueError("pass a competition slug or a list of team ids")
+    # the projection placeholder comes first in the statement, so it binds first
+    params: list[Any] = [list(PLAYER_STAT_KEYS)]
     where = ["g.status = 'final'"]
-    params: list[Any] = []
     if competition_slug:
         where.append("c.slug = %s")
         params.append(competition_slug)
     if team_ids:
         where.append("s.team_id = ANY(%s)")
         params.append(list(team_ids))
+    if history_days is not None:
+        where.append("g.kickoff >= now() - make_interval(days => %s)")
+        params.append(history_days)
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             f"""
@@ -64,7 +83,12 @@ def load_player_games(
                    CASE WHEN s.team_id = g.home_team_id THEN g.away_team_id
                         ELSE g.home_team_id END AS opp_id,
                    (s.team_id = g.home_team_id) AS home,
-                   s.player_id, p.full_name, p.position, s.stats
+                   s.player_id, p.full_name, p.position,
+                   COALESCE((
+                       SELECT jsonb_object_agg(e.key, e.value)
+                       FROM jsonb_each(s.stats) AS e(key, value)
+                       WHERE e.key = ANY(%s)
+                   ), '{{}}'::jsonb) AS stats
             FROM player_game_stat s
             JOIN game g ON g.id = s.game_id
             JOIN competition c ON c.id = g.competition_id
@@ -91,22 +115,41 @@ def load_player_games(
         ]
 
 
-def load_team_games(conn: psycopg.Connection[Any], competition_slug: str) -> list[dict[str, Any]]:
-    """One row per (game, team) with the team's box-score stats, final games only."""
+def load_team_games(
+    conn: psycopg.Connection[Any],
+    competition_slug: str,
+    *,
+    history_days: int | None = HISTORY_DAYS,
+) -> list[dict[str, Any]]:
+    """One row per (game, team) with the team's box-score stats, final games only.
+
+    Narrowed and bounded for the same reason as `load_player_games`: the counts
+    models read two keys out of a full team box score.
+    """
+    where = ["c.slug = %s", "g.status = 'final'"]
+    params: list[Any] = [list(TEAM_STAT_KEYS), competition_slug]
+    if history_days is not None:
+        where.append("g.kickoff >= now() - make_interval(days => %s)")
+        params.append(history_days)
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
-            """
+            f"""
             SELECT s.game_id, g.kickoff, g.season_id, s.team_id,
                    CASE WHEN s.team_id = g.home_team_id THEN g.away_team_id
                         ELSE g.home_team_id END AS opp_id,
-                   (s.team_id = g.home_team_id) AS home, s.stats
+                   (s.team_id = g.home_team_id) AS home,
+                   COALESCE((
+                       SELECT jsonb_object_agg(e.key, e.value)
+                       FROM jsonb_each(s.stats) AS e(key, value)
+                       WHERE e.key = ANY(%s)
+                   ), '{{}}'::jsonb) AS stats
             FROM team_game_stat s
             JOIN game g ON g.id = s.game_id
             JOIN competition c ON c.id = g.competition_id
-            WHERE c.slug = %s AND g.status = 'final'
+            WHERE {" AND ".join(where)}
             ORDER BY g.kickoff, g.id
             """,
-            (competition_slug,),
+            params,
         )
         return [dict(r) for r in cur.fetchall()]
 
@@ -237,6 +280,25 @@ def football_values(stats: dict[str, Any]) -> dict[str, float]:
     out["td"] = out["rushTd"] + out["recTd"]
     out["touches"] = out["carries"] + out["targets"]
     return out
+
+
+SOCCER_KEYS = (
+    "totalGoals",
+    "totalShots",
+    "shotsOnTarget",
+    "goalAssists",
+    "appearances",
+    "starter",
+    "subbedIn",
+)
+
+# Every stat key any model reads out of player_game_stat.stats. The loaders below
+# project exactly these in SQL, so anything added to a *_values function must be
+# added here too -- test_players.py fails if the two drift apart.
+PLAYER_STAT_KEYS = tuple(sorted(set(FOOTBALL_KEYS) | set(SOCCER_KEYS)))
+
+# The same, for team_game_stat.stats. Mirrors soccer_props.COUNT_MARKETS.
+TEAM_STAT_KEYS = ("shotsOnTarget", "wonCorners")
 
 
 def soccer_values(stats: dict[str, Any]) -> dict[str, float]:
