@@ -154,14 +154,12 @@ def test_event_season_in_range_responses():
     calendar = espn.SeasonRef(label="2026", year=2026)
     assert espn.event_season({"season": {"year": 2024, "slug": "x"}}, calendar).label == "2024"
     assert espn.event_season({"season": {"year": 2026}}, league) is league
-    assert espn.scoreboard_url(espn.league("eng.1"), date(2019, 8, 1), date(2019, 8, 31)).endswith(
-        "/soccer/eng.1/scoreboard?dates=20190801-20190831&limit=1000"
+    # ESPN dropped the dates=A-B range form in Sept 2026 (400 on every sport), so a
+    # day is all a scoreboard URL ever asks for -- and never a range, however old.
+    assert espn.scoreboard_url(espn.league("eng.1"), date(2019, 8, 1)).endswith(
+        "/soccer/eng.1/scoreboard?dates=20190801"
     )
-    days = [date(2019, 8, 30), date(2019, 8, 31), date(2019, 9, 1), date(2019, 9, 2)]
-    assert espn.month_chunks(days) == [
-        (date(2019, 8, 30), date(2019, 8, 31)),
-        (date(2019, 9, 1), date(2019, 9, 2)),
-    ]
+    assert not hasattr(espn, "month_chunks")
 
 
 def test_urls():

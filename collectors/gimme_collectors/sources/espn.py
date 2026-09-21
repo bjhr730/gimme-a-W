@@ -5,6 +5,7 @@ tests/fixtures/espn; when ESPN changes something, those tests fail first.
 
 Endpoints
     site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard?dates=YYYYMMDD
+    (one day per request: the dates=A-B range form returns 400 as of Sept 2026)
     site.api.espn.com/apis/site/v2/sports/{sport}/{league}/teams
     site.api.espn.com/apis/v2/sports/{sport}/{league}/standings
 """
@@ -143,31 +144,20 @@ def _url(base: str, lg: League, path: str, params: dict[str, str]) -> str:
     return f"{url}?{urlencode(params)}" if params else url
 
 
-def scoreboard_url(lg: League, day: date | None = None, end: date | None = None) -> str:
-    """One day, or an inclusive range (ESPN accepts dates=YYYYMMDD-YYYYMMDD)."""
+def scoreboard_url(lg: League, day: date | None = None) -> str:
+    """One day's board, or today's if no day is given.
+
+    ESPN used to accept `dates=YYYYMMDD-YYYYMMDD` and answer a whole range in one
+    request. That stopped working in September 2026 -- every sport now returns
+    `400 Failed to get events endpoint.` for a range while single dates are fine --
+    so a window is fetched a day at a time. The upside is that a past day's URL
+    never changes, where a range URL was different on every run, so the disk cache
+    actually earns its keep on a backfill.
+    """
     params = dict(lg.scoreboard_params)
-    if day is not None and end is not None and end != day:
-        params["dates"] = f"{day.strftime('%Y%m%d')}-{end.strftime('%Y%m%d')}"
-        params.setdefault("limit", "1000")
-    elif day is not None:
+    if day is not None:
         params["dates"] = day.strftime("%Y%m%d")
     return _url(SITE, lg, "scoreboard", params)
-
-
-def month_chunks(days: list[date]) -> list[tuple[date, date]]:
-    """Consecutive days grouped per calendar month: [(first, last), ...]."""
-    if not days:
-        return []
-    ordered = sorted(days)
-    chunks: list[tuple[date, date]] = []
-    start = prev = ordered[0]
-    for d in ordered[1:]:
-        if (d.year, d.month) != (prev.year, prev.month) or (d - prev).days > 1:
-            chunks.append((start, prev))
-            start = d
-        prev = d
-    chunks.append((start, prev))
-    return chunks
 
 
 def teams_url(lg: League) -> str:
@@ -606,10 +596,8 @@ class EspnAdapter:
     def __init__(self, fetcher: Fetcher) -> None:
         self.fetcher = fetcher
 
-    def scoreboard(
-        self, lg: League, day: date | None, result: CollectResult, end: date | None = None
-    ) -> None:
-        url = scoreboard_url(lg, day, end)
+    def scoreboard(self, lg: League, day: date | None, result: CollectResult) -> None:
+        url = scoreboard_url(lg, day)
         payload, fetched = self.fetcher.get_json(url)
         result.fetched_urls.append(url)
         result.games.extend(parse_scoreboard(payload, lg, captured_at=fetched.fetched_at))
@@ -629,15 +617,14 @@ class EspnAdapter:
     def summaries(self, lg: League, days: list[date], result: CollectResult) -> None:
         """Game summaries for every event on the given days (box scores, lineups, FPI).
 
-        A long range is a backfill: enumerate events one request per month and skip
-        games that have not kicked off, which have no box score to add."""
+        A long window is a backfill: skip games that have not kicked off, which have
+        no box score to add."""
         from gimme_collectors.sources import espn_summary
 
         backfill = len(days) > 7
-        ranges = month_chunks(days) if backfill else [(day, None) for day in days]
         seen: set[str] = set()
-        for start, end in ranges:
-            url = scoreboard_url(lg, start, end)
+        for day in days:
+            url = scoreboard_url(lg, day)
             payload, _ = self.fetcher.get_json(url)
             if url not in result.fetched_urls:
                 result.fetched_urls.append(url)
@@ -707,13 +694,8 @@ class EspnAdapter:
         if "teams" in kinds:
             self.teams(lg, result)
         if "scoreboard" in kinds:
-            if len(days) > 7:
-                # backfill: one request per calendar month instead of per day
-                for start, end in month_chunks(days):
-                    self.scoreboard(lg, start, result, end=end)
-            else:
-                for day in days:
-                    self.scoreboard(lg, day, result)
+            for day in days:
+                self.scoreboard(lg, day, result)
         if "standings" in kinds:
             self.standings(lg, max(days) if days else date.today(), result)
         if "summary" in kinds:
