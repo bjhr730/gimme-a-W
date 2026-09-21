@@ -19,6 +19,7 @@ from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from gimme_collectors import quota
 from gimme_collectors.config import settings
 from gimme_collectors.models import CollectResult
 from gimme_collectors.pipeline.fetch import Fetcher
@@ -369,7 +370,7 @@ def _use_utf8_output() -> None:
                 reconfigure(encoding="utf-8", errors="replace")
 
 
-def main(argv: list[str] | None = None) -> int:
+def _dispatch(argv: list[str] | None) -> int:
     _use_utf8_output()
     args = _build_parser().parse_args(argv)
     if args.command == "leagues":
@@ -389,6 +390,12 @@ def main(argv: list[str] | None = None) -> int:
 
         return health.main(cfg.database_url)
     return 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    # A database out of allowance is a known, self-clearing state, not a
+    # failure worth emailing about every six hours. Everything else still fails.
+    return quota.guard(lambda: _dispatch(argv))
 
 
 if __name__ == "__main__":

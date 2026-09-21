@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 
 import psycopg
 
+from gimme_collectors import quota
 from gimme_collectors.config import settings
 from gimme_predict import data, evaluate, props
 from gimme_predict.features import build_features
@@ -313,7 +314,7 @@ def _use_utf8_output() -> None:
                 reconfigure(encoding="utf-8", errors="replace")
 
 
-def main(argv: list[str] | None = None) -> int:
+def _dispatch(argv: list[str] | None) -> int:
     _use_utf8_output()
     args = _build_parser().parse_args(argv)
     if args.command == "backtest":
@@ -347,6 +348,12 @@ def main(argv: list[str] | None = None) -> int:
             print(line)
         return 0
     return 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    # A database out of allowance is a known, self-clearing state, not a
+    # failure worth emailing about every six hours. Everything else still fails.
+    return quota.guard(lambda: _dispatch(argv))
 
 
 if __name__ == "__main__":
