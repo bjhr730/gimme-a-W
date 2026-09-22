@@ -104,8 +104,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument(
         "--what",
-        default="games,players",
-        help="nflverse: games | players · cfbd: games | lines (comma separated)",
+        default="",
+        help="nflverse: games | players (default both) · cfbd: games | lines (default both)",
     )
     run.add_argument(
         "--league",
@@ -183,7 +183,7 @@ def _espn_units(args: argparse.Namespace, fetcher: Fetcher) -> Iterator[tuple[st
 def _nflverse_units(
     args: argparse.Namespace, fetcher: Fetcher
 ) -> Iterator[tuple[str, CollectResult]]:
-    what = {w.strip() for w in args.what.split(",") if w.strip()}
+    what = {w.strip() for w in args.what.split(",") if w.strip()} or {"games", "players"}
     seasons = _parse_seasons(args.seasons)
     games_csv, _ = fetcher.get(nflverse.GAMES_URL), None
     text = games_csv.body
@@ -230,18 +230,17 @@ def _fdcouk_units(
 
 def _cfbd_units(args: argparse.Namespace, fetcher: Fetcher) -> Iterator[tuple[str, CollectResult]]:
     """One request per season per season-type: CFBD answers a whole season at once."""
-    what = {w.strip() for w in args.what.split(",") if w.strip()}
-    # the nflverse default ("games,players") means players here; games is the point
-    if not what & {"games", "lines"}:
-        what = {"games", "lines"}
+    what = {w.strip() for w in args.what.split(",") if w.strip()} or {"games", "lines"}
     for year in _parse_seasons(args.seasons):
         for season_type in ("regular", "postseason"):
             odds: dict[str, list[Any]] = {}
+            urls: list[str] = []
             if "lines" in what:
-                url = cfbd.lines_url(year, season_type=season_type)
+                lines_url = cfbd.lines_url(year, season_type=season_type)
                 try:
-                    payload, _ = fetcher.get_json(url)
+                    payload, _ = fetcher.get_json(lines_url)
                     odds = cfbd.parse_lines(payload)
+                    urls.append(lines_url)
                 except Exception as exc:  # lines are a bonus, never the reason to fail
                     print(f"[cfbd lines {year} {season_type}] skipped: {exc}")
             if "games" not in what:
@@ -252,7 +251,7 @@ def _cfbd_units(args: argparse.Namespace, fetcher: Fetcher) -> Iterator[tuple[st
             except Exception as exc:
                 print(f"[cfbd games {year} {season_type}] skipped: {exc}")
                 continue
-            result = CollectResult(fetched_urls=[url])
+            result = CollectResult(fetched_urls=[url, *urls])
             result.games = cfbd.parse_games(payload, odds=odds)
             if result.games:
                 yield f"cfbd games {year} {season_type}", result
