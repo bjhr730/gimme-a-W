@@ -51,8 +51,9 @@ jobs:
         run: uv run gimme-collect run espn --kind scoreboard --league all --date today --days 10
       # A missed or failed run used to leave a hole in the season that nothing
       # filled in later. Re-reading the last three weeks closes any gap. Once a
-      # day is enough. Since ESPN dropped range requests this is a day at a time,
-      # so it is slower than it was -- but past days cache, so a repeat is cheap.
+      # day is enough. Since ESPN dropped range requests, football is fetched a
+      # day at a time and soccer a month at a time -- so three weeks of soccer is
+      # one or two requests per league, not twenty-two.
       - name: Re-read the last three weeks so a missed run cannot leave a gap
         if: always()
         run: |

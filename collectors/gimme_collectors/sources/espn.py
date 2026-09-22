@@ -145,19 +145,36 @@ def _url(base: str, lg: League, path: str, params: dict[str, str]) -> str:
 
 
 def scoreboard_url(lg: League, day: date | None = None) -> str:
-    """One day's board, or today's if no day is given.
+    """The board covering `day`, or the default board if no day is given.
 
     ESPN used to accept `dates=YYYYMMDD-YYYYMMDD` and answer a whole range in one
-    request. That stopped working in September 2026 -- every sport now returns
-    `400 Failed to get events endpoint.` for a range while single dates are fine --
-    so a window is fetched a day at a time. The upside is that a past day's URL
-    never changes, where a range URL was different on every run, so the disk cache
-    actually earns its keep on a backfill.
+    request. That stopped working in September 2026: every sport now answers a
+    range with `400 Failed to get events endpoint.`
+
+    What replaces it differs by sport, and the soccer half is not obvious.
+    Football answers a single day for any date, past or future. Soccer answers a
+    single day only for dates that have already happened -- ask it for next
+    Sunday and it returns an empty list, no error -- but it answers a whole month
+    at `dates=YYYYMM`, fixtures included. So soccer is fetched a month at a time
+    and football a day at a time, and asking soccer by day is how a schedule
+    silently disappears.
     """
     params = dict(lg.scoreboard_params)
     if day is not None:
-        params["dates"] = day.strftime("%Y%m%d")
+        params["dates"] = day.strftime("%Y%m" if lg.sport == "soccer" else "%Y%m%d")
     return _url(SITE, lg, "scoreboard", params)
+
+
+def request_dates(lg: League, days: list[date]) -> list[date]:
+    """The dates to actually request to cover `days`: one per month for soccer,
+    one per day otherwise. Without this a ten-day window asks for the same
+    soccer month ten times."""
+    if lg.sport != "soccer":
+        return sorted(set(days))
+    first_of_month: dict[tuple[int, int], date] = {}
+    for day in sorted(days):
+        first_of_month.setdefault((day.year, day.month), day.replace(day=1))
+    return list(first_of_month.values())
 
 
 def teams_url(lg: League) -> str:
@@ -622,8 +639,9 @@ class EspnAdapter:
         from gimme_collectors.sources import espn_summary
 
         backfill = len(days) > 7
+        wanted = {day.isoformat() for day in days}
         seen: set[str] = set()
-        for day in days:
+        for day in request_dates(lg, days):
             url = scoreboard_url(lg, day)
             payload, _ = self.fetcher.get_json(url)
             if url not in result.fetched_urls:
@@ -631,6 +649,10 @@ class EspnAdapter:
             for ev in payload.get("events") or []:
                 event_id = str(ev.get("id") or "")
                 if not event_id or event_id in seen:
+                    continue
+                # a soccer request answers a whole month; only the days asked for
+                # should cost a summary fetch each
+                if str(ev.get("date") or "")[:10] not in wanted:
                     continue
                 if backfill and not _has_started(ev):
                     continue
@@ -694,7 +716,7 @@ class EspnAdapter:
         if "teams" in kinds:
             self.teams(lg, result)
         if "scoreboard" in kinds:
-            for day in days:
+            for day in request_dates(lg, days):
                 self.scoreboard(lg, day, result)
         if "standings" in kinds:
             self.standings(lg, max(days) if days else date.today(), result)

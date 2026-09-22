@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from gimme_collectors.sources import espn
 
@@ -154,10 +154,10 @@ def test_event_season_in_range_responses():
     calendar = espn.SeasonRef(label="2026", year=2026)
     assert espn.event_season({"season": {"year": 2024, "slug": "x"}}, calendar).label == "2024"
     assert espn.event_season({"season": {"year": 2026}}, league) is league
-    # ESPN dropped the dates=A-B range form in Sept 2026 (400 on every sport), so a
-    # day is all a scoreboard URL ever asks for -- and never a range, however old.
+    # ESPN dropped the dates=A-B range form in Sept 2026 (400 on every sport).
+    # Soccer answers a month; a single soccer day returns past fixtures only.
     assert espn.scoreboard_url(espn.league("eng.1"), date(2019, 8, 1)).endswith(
-        "/soccer/eng.1/scoreboard?dates=20190801"
+        "/soccer/eng.1/scoreboard?dates=201908"
     )
     assert not hasattr(espn, "month_chunks")
 
@@ -176,3 +176,34 @@ def test_parse_scoreboard_captured_at(fixture):
     at = datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
     games = espn.parse_scoreboard(fixture("espn/nfl-scoreboard.json"), espn.league("nfl"), at)
     assert all(o.captured_at == at for g in games for o in g.odds)
+
+
+def test_soccer_asks_by_month_and_football_by_day():
+    """Soccer returns nothing for a future single date -- only a month carries
+    fixtures -- while football answers any single day. Asking soccer by day is
+    how a whole schedule silently disappears."""
+    day = date(2026, 10, 17)
+    assert espn.scoreboard_url(espn.league("eng.1"), day).endswith("?dates=202610")
+    assert espn.scoreboard_url(espn.league("uefa.champions"), day).endswith("?dates=202610")
+    nfl = espn.scoreboard_url(espn.league("nfl"), day)
+    assert nfl.endswith("?dates=20261017")
+    cfb = espn.scoreboard_url(espn.league("college-football"), day)
+    assert "dates=20261017" in cfb and "groups=80" in cfb
+
+
+def test_a_window_collapses_to_one_request_per_soccer_month():
+    window = [date(2026, 9, 22) + timedelta(days=i) for i in range(14)]
+    soccer = espn.request_dates(espn.league("eng.1"), window)
+    assert soccer == [date(2026, 9, 1), date(2026, 10, 1)]  # two months, two requests
+    football = espn.request_dates(espn.league("nfl"), window)
+    assert football == sorted(window)  # a day is a day
+
+
+def test_request_dates_is_stable_and_deduplicated():
+    repeated = [date(2026, 10, 3), date(2026, 10, 3), date(2026, 10, 9)]
+    assert espn.request_dates(espn.league("eng.1"), repeated) == [date(2026, 10, 1)]
+    assert espn.request_dates(espn.league("nfl"), repeated) == [
+        date(2026, 10, 3),
+        date(2026, 10, 9),
+    ]
+    assert espn.request_dates(espn.league("eng.1"), []) == []
