@@ -23,7 +23,7 @@ from gimme_collectors import quota
 from gimme_collectors.config import settings
 from gimme_collectors.models import CollectResult
 from gimme_collectors.pipeline.fetch import Fetcher
-from gimme_collectors.sources import espn, fdcouk, nflverse
+from gimme_collectors.sources import cfbd, espn, fdcouk, nflverse
 
 KINDS = {"scoreboard", "teams", "standings", "summary", "roster", "injuries"}
 DAILY_KINDS = {"scoreboard", "teams", "standings", "summary", "injuries"}  # `all`; rosters weekly
@@ -47,6 +47,12 @@ SOURCES: dict[str, dict[str, Any]] = {
         "name": fdcouk.SOURCE_NAME,
         "base_url": fdcouk.BASE_URL,
         "rate": fdcouk.RATE_LIMIT_PER_MIN,
+    },
+    "cfbd": {
+        "slug": cfbd.SOURCE_SLUG,
+        "name": cfbd.SOURCE_NAME,
+        "base_url": cfbd.BASE_URL,
+        "rate": cfbd.RATE_LIMIT_PER_MIN,
     },
 }
 
@@ -99,7 +105,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--what",
         default="games,players",
-        help="nflverse: games | players (comma separated)",
+        help="nflverse: games | players · cfbd: games | lines (comma separated)",
     )
     run.add_argument(
         "--league",
@@ -114,7 +120,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--seasons",
         default="current",
-        help="nflverse/fdcouk: '2015-2026', '2024,2025' or 'current' (season start year)",
+        help="nflverse/fdcouk/cfbd: '2015-2026', '2024,2025' or 'current' (season start year)",
     )
     run.add_argument(
         "--dry-run", action="store_true", help="fetch and parse but write nothing to the database"
@@ -222,12 +228,58 @@ def _fdcouk_units(
             yield f"fdcouk {slug} {fdcouk.season_label(season)}", result
 
 
-UNITS = {"espn": _espn_units, "nflverse": _nflverse_units, "fdcouk": _fdcouk_units}
+def _cfbd_units(args: argparse.Namespace, fetcher: Fetcher) -> Iterator[tuple[str, CollectResult]]:
+    """One request per season per season-type: CFBD answers a whole season at once."""
+    what = {w.strip() for w in args.what.split(",") if w.strip()}
+    # the nflverse default ("games,players") means players here; games is the point
+    if not what & {"games", "lines"}:
+        what = {"games", "lines"}
+    for year in _parse_seasons(args.seasons):
+        for season_type in ("regular", "postseason"):
+            odds: dict[str, list[Any]] = {}
+            if "lines" in what:
+                url = cfbd.lines_url(year, season_type=season_type)
+                try:
+                    payload, _ = fetcher.get_json(url)
+                    odds = cfbd.parse_lines(payload)
+                except Exception as exc:  # lines are a bonus, never the reason to fail
+                    print(f"[cfbd lines {year} {season_type}] skipped: {exc}")
+            if "games" not in what:
+                continue
+            url = cfbd.games_url(year, season_type=season_type)
+            try:
+                payload, _ = fetcher.get_json(url)
+            except Exception as exc:
+                print(f"[cfbd games {year} {season_type}] skipped: {exc}")
+                continue
+            result = CollectResult(fetched_urls=[url])
+            result.games = cfbd.parse_games(payload, odds=odds)
+            if result.games:
+                yield f"cfbd games {year} {season_type}", result
+
+
+UNITS = {
+    "espn": _espn_units,
+    "nflverse": _nflverse_units,
+    "fdcouk": _fdcouk_units,
+    "cfbd": _cfbd_units,
+}
 
 
 def cmd_run(args: argparse.Namespace) -> int:
     cfg = settings()
     source = SOURCES[args.source]
+
+    auth: dict[str, str] | None = None
+    if args.source == "cfbd":
+        if not cfg.cfbd_api_key:
+            print(
+                "CFBD_API_KEY is not set. Register free at collegefootballdata.com "
+                "and put the key in .env (and in the repo secrets for CI).",
+                file=sys.stderr,
+            )
+            return 2
+        auth = cfbd.auth_headers(cfg.cfbd_api_key)
 
     writer = None
     run_id = None
@@ -263,6 +315,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         rate_limit_per_min=source["rate"],
         cache_ttl_seconds=0 if args.no_cache else cfg.cache_ttl_seconds,
         sink=writer.save_raw if writer else None,
+        extra_headers=auth,
     )
     failures: list[str] = []
 

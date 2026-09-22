@@ -32,6 +32,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       COLLECTOR_USER_AGENT: ${{ vars.COLLECTOR_USER_AGENT }}
+      CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -45,12 +46,13 @@ jobs:
             --league "${{ github.event.inputs.league || 'all' }}" \
             --date "${{ github.event.inputs.date || 'yesterday' }}" \
             --days "${{ github.event.inputs.days || '3' }}"
-      - name: Fixtures for the next ten days (one range request per league)
+      - name: Fixtures for the next ten days
         if: always()
         run: uv run gimme-collect run espn --kind scoreboard --league all --date today --days 10
       # A missed or failed run used to leave a hole in the season that nothing
       # filled in later. Re-reading the last three weeks closes any gap. Once a
-      # day is enough for that, and it costs about five minutes a pass.
+      # day is enough. Since ESPN dropped range requests this is a day at a time,
+      # so it is slower than it was -- but past days cache, so a repeat is cheap.
       - name: Re-read the last three weeks so a missed run cannot leave a gap
         if: always()
         run: |
@@ -59,6 +61,14 @@ jobs:
           else
             echo "Skipped: the three-week re-read runs on the 05:15 UTC pass."
           fi
+      # College football is the one competition ESPN served alone, and the results
+      # showed it. CFBD is its nflverse: documented, keyed, and authoritative on
+      # scores. Games land on the rows ESPN already created (name-matched teams,
+      # kickoff within 36 hours), so this adds results and lines rather than
+      # duplicates. Skipped silently until the free key is in the repo secrets.
+      - name: College football games and betting lines from CollegeFootballData
+        if: always() && env.CFBD_API_KEY != ''
+        run: uv run gimme-collect run cfbd --seasons current --what games,lines
       - name: Recompute team form and Elo ratings
         if: always()
         run: uv run gimme-collect derive --what form,elo

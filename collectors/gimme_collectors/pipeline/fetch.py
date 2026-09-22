@@ -53,6 +53,7 @@ class Fetcher:
         retries: int = 2,
         sink: RawSink | None = None,
         transport: httpx.BaseTransport | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> None:
         self.source = source
         self.cache_dir = cache_dir / source
@@ -63,7 +64,13 @@ class Fetcher:
         self.sink = sink
         self._last_request = 0.0
         self._client = httpx.Client(
-            headers={"User-Agent": user_agent, "Accept": "application/json, text/html;q=0.5"},
+            headers={
+                "User-Agent": user_agent,
+                "Accept": "application/json, text/html;q=0.5",
+                # keyed sources (CFBD) authenticate with a header, not a query param,
+                # so it must never reach the cache filename or the raw-page sink
+                **(extra_headers or {}),
+            },
             timeout=timeout,
             follow_redirects=True,
             transport=transport,
