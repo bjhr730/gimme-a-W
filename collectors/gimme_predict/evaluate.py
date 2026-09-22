@@ -90,7 +90,13 @@ def backtest_football(games: list[Game], *, min_train_seasons: int = 2) -> list[
     return results
 
 
-def backtest_soccer(games: list[Game], *, min_train_seasons: int = 1) -> list[SeasonResult]:
+def backtest_soccer(
+    games: list[Game],
+    *,
+    min_train_seasons: int = 1,
+    shots: dict[int, tuple[float, float]] | None = None,
+    shot_prior_weight: float = 0.0,
+) -> list[SeasonResult]:
     seasons = _seasons(games)
     results: list[SeasonResult] = []
     for idx in range(min_train_seasons, len(seasons)):
@@ -102,10 +108,11 @@ def backtest_soccer(games: list[Game], *, min_train_seasons: int = 1) -> list[Se
         # walk the target season so each game is predicted with what preceded it
         preds = []
         history = list(train_games)
-        model = soccer.train(history)
+        fit = {"shots": shots, "shot_prior_weight": shot_prior_weight}
+        model = soccer.train(history, **fit)
         for k, g in enumerate(test_games):
             if k % 40 == 0 and k > 0:
-                model = soccer.train(history + test_games[:k])
+                model = soccer.train(history + test_games[:k], **fit)
             if model is None:
                 break
             preds.extend(soccer.predict(model, [g]))

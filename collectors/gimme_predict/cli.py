@@ -18,7 +18,7 @@ import psycopg
 
 from gimme_collectors import quota
 from gimme_collectors.config import settings
-from gimme_predict import data, evaluate, props
+from gimme_predict import data, evaluate, players, props
 from gimme_predict.features import build_features
 from gimme_predict.markets import football, football_players, soccer, soccer_props
 
@@ -78,6 +78,13 @@ def _build_parser() -> argparse.ArgumentParser:
             default="games,props",
             help="games (result/spread/total) and/or props (player and team markets)",
         )
+        p.add_argument(
+            "--shot-prior",
+            default="0",
+            help="soccer only: pull team strengths toward their shots-on-target fit "
+            "instead of toward nothing. 0 is the goals-only model. Give a "
+            "comma-separated list to back-test several weights side by side.",
+        )
         if name == "run":
             p.add_argument(
                 "--days", type=int, default=8, help="predict games kicking off within N days"
@@ -127,7 +134,34 @@ def cmd_backtest(args: argparse.Namespace) -> int:
             if "games" not in markets:
                 continue
             if sport == "soccer":
-                results = evaluate.backtest_soccer(games)
+                weights = [float(x) for x in str(args.shot_prior).split(",") if x.strip()]
+                shots = None
+                if any(x > 0 for x in weights):
+                    # the history is unbounded here on purpose: a back-test is
+                    # allowed the whole archive, a nightly run is not
+                    shots = players.shots_by_game(
+                        players.load_team_games(conn, slug, history_days=None)
+                    )
+                    print(f"[{slug}] shot counts for {len(shots)} games")
+                if len(weights) > 1:
+                    # sweep: the point is to see whether the prior helps at all,
+                    # so print every weight side by side and write none of them
+                    print(f"[{slug}] shot-prior sweep")
+                    for weight in weights:
+                        swept = evaluate.backtest_soccer(
+                            games, shots=shots, shot_prior_weight=weight
+                        )
+                        if not swept:
+                            continue
+                        overall = evaluate.summarize(swept)["overall"]
+                        print(
+                            f"  weight={weight:<5} n={overall['games']:<6} "
+                            f"model_ll={overall['model_log_loss']:.5f}"
+                        )
+                    continue
+                results = evaluate.backtest_soccer(
+                    games, shots=shots, shot_prior_weight=weights[0] if weights else 0.0
+                )
                 name, version = soccer.MODEL_NAME, soccer.MODEL_VERSION
             else:
                 results = evaluate.backtest_football(games)
@@ -240,7 +274,13 @@ def cmd_run(args: argparse.Namespace) -> int:
             if "games" not in markets:
                 continue
             if sport == "soccer":
-                model = soccer.train(games)
+                weight = float(args.shot_prior or 0)
+                shots = (
+                    players.shots_by_game(players.load_team_games(conn, slug))
+                    if weight > 0
+                    else None
+                )
+                model = soccer.train(games, shots=shots, shot_prior_weight=weight)
                 if model is None:
                     print(f"[{slug}] not enough history to fit a model")
                     continue

@@ -60,9 +60,117 @@ def _tau(x: int, y: int, lam: float, mu: float, rho: float) -> float:
 MIN_XG, MAX_XG = 0.25, 4.0
 
 
+def _poisson_fit(
+    hi: np.ndarray,
+    ai: np.ndarray,
+    hg: np.ndarray,
+    ag: np.ndarray,
+    w: np.ndarray,
+    n: int,
+    *,
+    ridge: float,
+    iterations: int,
+    prior_attack: np.ndarray | None = None,
+    prior_defence: np.ndarray | None = None,
+    prior_weight: float = 0.0,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Gradient ascent on the weighted Poisson log-likelihood.
+
+    The ridge pulls strengths toward zero. `prior_weight` adds a second pull,
+    toward `prior_attack` / `prior_defence` -- at zero this is exactly the
+    ridge-only fit, so the caller decides whether a prior exists at all.
+    """
+    attack = np.zeros(n)
+    defence = np.zeros(n)
+    home = 0.25
+    lr = 0.02
+    games = len(hg)
+    pull_a = prior_attack if prior_attack is not None else np.zeros(n)
+    pull_d = prior_defence if prior_defence is not None else np.zeros(n)
+    for _ in range(iterations):
+        lam = np.exp(attack[hi] - defence[ai] + home)
+        mu = np.exp(attack[ai] - defence[hi])
+        # gradient of weighted Poisson log-likelihood
+        d_lam = w * (hg - lam)
+        d_mu = w * (ag - mu)
+        g_att = (
+            np.bincount(hi, d_lam, n)
+            + np.bincount(ai, d_mu, n)
+            - ridge * attack
+            - prior_weight * (attack - pull_a)
+        )
+        g_def = (
+            -np.bincount(ai, d_lam, n)
+            - np.bincount(hi, d_mu, n)
+            - ridge * defence
+            - prior_weight * (defence - pull_d)
+        )
+        g_home = float(np.sum(d_lam))
+        attack += lr * g_att / max(1.0, np.sqrt(games / n))
+        defence += lr * g_def / max(1.0, np.sqrt(games / n))
+        home += lr * g_home / games
+        attack -= attack.mean()  # identifiability
+    return attack, defence, home
+
+
+def shot_strengths(
+    hi: np.ndarray,
+    ai: np.ndarray,
+    h_sot: np.ndarray,
+    a_sot: np.ndarray,
+    hg: np.ndarray,
+    ag: np.ndarray,
+    w: np.ndarray,
+    n: int,
+    *,
+    ridge: float,
+    iterations: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Attack and defence fitted to shots on target instead of goals.
+
+    Goals are the outcome but a thin signal: a team can win 1-0 from three shots
+    and lose 0-1 from twenty. Shots on target are several times more numerous, so
+    the same number of games pins a team's strength far more tightly -- which is
+    exactly what the ridge has been papering over early in a season.
+
+    Shots are rescaled to goals by the sample's own conversion rate, so the
+    strengths come out on the same scale as the goal-fitted ones and can be used
+    as a prior for them.
+    """
+    total_sot = float(np.sum(w * (h_sot + a_sot)))
+    if total_sot <= 0:
+        return np.zeros(n), np.zeros(n)
+    conversion = float(np.sum(w * (hg + ag))) / total_sot
+    attack, defence, _ = _poisson_fit(
+        hi,
+        ai,
+        h_sot * conversion,
+        a_sot * conversion,
+        w,
+        n,
+        ridge=ridge,
+        iterations=iterations,
+    )
+    return attack, defence
+
+
 def train(
-    games: list[Game], *, as_of: datetime | None = None, ridge: float = 0.2, iterations: int = 300
+    games: list[Game],
+    *,
+    as_of: datetime | None = None,
+    ridge: float = 0.2,
+    iterations: int = 300,
+    shots: dict[int, tuple[float, float]] | None = None,
+    shot_prior_weight: float = 0.0,
 ) -> SoccerModel | None:
+    """Fit the model.
+
+    `shots` maps game id to (home shots on target, away shots on target). When it
+    is given and `shot_prior_weight` is above zero, strengths are pulled toward
+    their shot-fitted values instead of toward nothing. At weight zero the fit is
+    identical to the goals-only one, which is what makes the two comparable in a
+    back-test.
+    """
     finals = [g for g in games if g.final]
     if len(finals) < 30:
         return None
@@ -79,23 +187,42 @@ def train(
     age = np.array([(as_of - g.kickoff).days for g in finals], dtype=float)
     w = np.power(0.5, np.clip(age, 0, None) / HALF_LIFE_DAYS)
 
-    attack = np.zeros(n)
-    defence = np.zeros(n)
-    home = 0.25
-    lr = 0.02
-    for _ in range(iterations):
-        lam = np.exp(attack[hi] - defence[ai] + home)
-        mu = np.exp(attack[ai] - defence[hi])
-        # gradient of weighted Poisson log-likelihood
-        d_lam = w * (hg - lam)
-        d_mu = w * (ag - mu)
-        g_att = np.bincount(hi, d_lam, n) + np.bincount(ai, d_mu, n) - ridge * attack
-        g_def = -np.bincount(ai, d_lam, n) - np.bincount(hi, d_mu, n) - ridge * defence
-        g_home = float(np.sum(d_lam))
-        attack += lr * g_att / max(1.0, np.sqrt(len(finals) / n))
-        defence += lr * g_def / max(1.0, np.sqrt(len(finals) / n))
-        home += lr * g_home / len(finals)
-        attack -= attack.mean()  # identifiability
+    prior_attack = prior_defence = None
+    prior_weight = 0.0
+    if shots and shot_prior_weight > 0:
+        h_sot = np.array([shots.get(g.id, (0.0, 0.0))[0] for g in finals], dtype=float)
+        a_sot = np.array([shots.get(g.id, (0.0, 0.0))[1] for g in finals], dtype=float)
+        covered = (h_sot + a_sot) > 0
+        # Only games with shot data inform the prior, and only if there are enough
+        # of them to be worth anything.
+        if covered.sum() >= 30:
+            prior_attack, prior_defence = shot_strengths(
+                hi[covered],
+                ai[covered],
+                h_sot[covered],
+                a_sot[covered],
+                hg[covered],
+                ag[covered],
+                w[covered],
+                n,
+                ridge=ridge,
+                iterations=iterations,
+            )
+            prior_weight = shot_prior_weight
+
+    attack, defence, home = _poisson_fit(
+        hi,
+        ai,
+        hg,
+        ag,
+        w,
+        n,
+        ridge=ridge,
+        iterations=iterations,
+        prior_attack=prior_attack,
+        prior_defence=prior_defence,
+        prior_weight=prior_weight,
+    )
     # rho by a coarse grid on the corrected likelihood
     lam = np.exp(attack[hi] - defence[ai] + home)
     mu = np.exp(attack[ai] - defence[hi])

@@ -154,6 +154,28 @@ def load_team_games(
         return [dict(r) for r in cur.fetchall()]
 
 
+def shots_by_game(team_rows: list[dict[str, Any]]) -> dict[int, tuple[float, float]]:
+    """(home shots on target, away shots on target) per game, from load_team_games.
+
+    Feeds the soccer model's shot prior. Games missing either side are dropped:
+    a one-sided count would read as a shut-out rather than as absent data.
+    """
+    sides: dict[int, dict[bool, float]] = defaultdict(dict)
+    for row in team_rows:
+        value = (row.get("stats") or {}).get("shotsOnTarget")
+        if value is None:
+            continue
+        try:
+            sides[int(row["game_id"])][bool(row["home"])] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return {
+        game_id: (side[True], side[False])
+        for game_id, side in sides.items()
+        if True in side and False in side
+    }
+
+
 def load_rosters(
     conn: psycopg.Connection[Any], team_ids: list[int]
 ) -> dict[int, list[dict[str, Any]]]:
