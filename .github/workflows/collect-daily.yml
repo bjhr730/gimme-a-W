@@ -69,6 +69,13 @@ jobs:
       - name: College football games and betting lines from CollegeFootballData
         if: always() && env.CFBD_API_KEY != ''
         run: uv run gimme-collect run cfbd --seasons current --what games,lines
+      # The NFL injury report moves Wednesday to Friday, so the Tuesday nflverse
+      # run is stale by kickoff. This is the league's own report -- designation
+      # plus practice participation, which the ESPN injuries page does not carry --
+      # and it is one small CSV, so it can run with the rest.
+      - name: NFL injury report from nflverse
+        if: always()
+        run: uv run gimme-collect run nflverse --seasons current --what injuries
       - name: Recompute team form and Elo ratings
         if: always()
         run: uv run gimme-collect derive --what form,elo

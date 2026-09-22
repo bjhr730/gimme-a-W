@@ -24,6 +24,7 @@ from gimme_collectors.models import (
     OddsRecord,
     PlayerGameStatRecord,
     PlayerRef,
+    PlayerStatusRecord,
     SeasonRef,
     SummaryRecord,
     TeamRef,
@@ -340,4 +341,96 @@ def game_id_map(csv_text: str, seasons: Iterable[int] | None = None) -> dict[str
         if season_year is None or (wanted is not None and season_year not in wanted):
             continue
         out[str(row["game_id"])] = game_external_id(row)
+    return out
+
+
+# ------------------------------------------------------------- injuries
+
+INJURIES_TAG = "injuries"
+
+
+def injuries_url(season: int) -> str:
+    return f"{BASE_URL}/releases/download/injuries/injuries_{season}.csv"
+
+
+# The league's weekly designation is the verdict; it is an official report, not a
+# guess. Probabilities match the scale espn_injuries already uses so the two
+# sources stay comparable.
+REPORT_STATUS = {
+    "out": ("out", 0.0),
+    "doubtful": ("doubtful", 0.25),
+    "questionable": ("questionable", 0.65),
+}
+
+# Practice participation is the extra signal ESPN's page does not carry: a
+# questionable who practised in full is a likelier starter than one who sat out
+# all week. These nudges are priors, not fitted numbers, and never override the
+# designation itself -- "out" is absolute.
+PRACTICE_NUDGE = {
+    "full participation in practice": 0.15,
+    "limited participation in practice": 0.0,
+    "did not participate in practice": -0.20,
+}
+
+
+def classify_report(report_status: str, practice_status: str) -> tuple[str, float] | None:
+    """(availability, play probability), or None when there is no designation."""
+    verdict = REPORT_STATUS.get((report_status or "").strip().lower())
+    if verdict is None:
+        return None
+    availability, probability = verdict
+    if availability != "out":
+        probability += PRACTICE_NUDGE.get((practice_status or "").strip().lower(), 0.0)
+    return availability, round(min(max(probability, 0.0), 1.0), 2)
+
+
+def parse_injuries(csv_text: str) -> list[PlayerStatusRecord]:
+    """The official weekly injury report, latest week per player.
+
+    Rows carrying no `report_status` are skipped: a player listed only for
+    practice participation has no game designation, so there is nothing to tell
+    the models -- and every row written here is a row read back later.
+    """
+    latest: dict[str, dict[str, Any]] = {}
+    for row in csv.DictReader(io.StringIO(csv_text)):
+        gsis = str(row.get("gsis_id") or "").strip()
+        if not gsis or not str(row.get("report_status") or "").strip():
+            continue
+        week = _i(row.get("week")) or 0
+        season = _i(row.get("season")) or 0
+        seen = latest.get(gsis)
+        if seen is None or (season, week) >= (seen["_season"], seen["_week"]):
+            row = dict(row)
+            row["_season"], row["_week"] = season, week
+            latest[gsis] = row
+
+    out: list[PlayerStatusRecord] = []
+    for gsis, row in latest.items():
+        team = team_ref(str(row.get("team") or "").strip())
+        verdict = classify_report(
+            str(row.get("report_status") or ""), str(row.get("practice_status") or "")
+        )
+        if team is None or verdict is None:
+            continue
+        availability, probability = verdict
+        injury = str(row.get("report_primary_injury") or "").strip() or None
+        secondary = str(row.get("report_secondary_injury") or "").strip() or None
+        practice = str(row.get("practice_status") or "").strip() or None
+        out.append(
+            PlayerStatusRecord(
+                competition=COMPETITION,
+                team=team,
+                player=PlayerRef(
+                    external_id=f"nflverse:{gsis}",
+                    full_name=str(row.get("full_name") or "").strip(),
+                    position=str(row.get("position") or "").strip() or None,
+                ),
+                status=str(row.get("report_status") or "").strip(),
+                availability=availability,
+                play_probability=probability,
+                injury_type=injury,
+                detail=secondary,
+                comment=practice,
+            )
+        )
     return out

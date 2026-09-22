@@ -63,7 +63,15 @@ SEVERITY = {"out": 0, "doubtful": 1, "questionable": 2, "available": 3}
 
 
 def load(conn: psycopg.Connection[Any], team_ids: list[int] | None = None) -> dict[int, Status]:
-    """Current status per player. When two sources disagree, the gloomier wins."""
+    """Current status per player. When two sources disagree, the gloomier wins.
+
+    Severity settles a real disagreement. Where two sources give the same verdict
+    the tie goes to the more authoritative one: nflverse publishes the league's
+    own weekly report, including practice participation, where ESPN's injuries
+    page is a summary of it. Without that, the nflverse row -- which carries no
+    timestamp of its own -- would lose the recency tiebreak and its finer play
+    probability would be thrown away.
+    """
     where = ""
     params: list[Any] = []
     if team_ids:
@@ -76,10 +84,12 @@ def load(conn: psycopg.Connection[Any], team_ids: list[int] | None = None) -> di
                    ps.player_id, ps.availability, ps.status, ps.play_probability,
                    ps.injury_type, ps.detail, ps.return_date
             FROM player_status ps
+            JOIN source src ON src.id = ps.source_id
             {where}
             ORDER BY ps.player_id,
                      CASE ps.availability WHEN 'out' THEN 0 WHEN 'doubtful' THEN 1
                           WHEN 'questionable' THEN 2 ELSE 3 END,
+                     CASE src.slug WHEN 'nflverse' THEN 0 ELSE 1 END,
                      ps.reported_at DESC NULLS LAST
             """,
             params,

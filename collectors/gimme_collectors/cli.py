@@ -105,7 +105,8 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--what",
         default="",
-        help="nflverse: games | players (default both) · cfbd: games | lines (default both)",
+        help="nflverse: games | players | injuries · cfbd: games | lines "
+        "(default: all of that source's kinds)",
     )
     run.add_argument(
         "--league",
@@ -183,7 +184,11 @@ def _espn_units(args: argparse.Namespace, fetcher: Fetcher) -> Iterator[tuple[st
 def _nflverse_units(
     args: argparse.Namespace, fetcher: Fetcher
 ) -> Iterator[tuple[str, CollectResult]]:
-    what = {w.strip() for w in args.what.split(",") if w.strip()} or {"games", "players"}
+    what = {w.strip() for w in args.what.split(",") if w.strip()} or {
+        "games",
+        "players",
+        "injuries",
+    }
     seasons = _parse_seasons(args.seasons)
     games_csv, _ = fetcher.get(nflverse.GAMES_URL), None
     text = games_csv.body
@@ -203,6 +208,20 @@ def _nflverse_units(
             result = CollectResult(fetched_urls=[url])
             result.summaries = nflverse.parse_player_stats(fetched.body, ids)
             yield f"nflverse players {season}", result
+    if "injuries" in what:
+        # The official weekly report, with practice participation -- which the ESPN
+        # injuries page does not carry. Only the current season is meaningful.
+        season = seasons[-1]
+        url = nflverse.injuries_url(season)
+        try:
+            fetched = fetcher.get(url)
+        except Exception as exc:
+            print(f"[nflverse injuries {season}] skipped: {exc}")
+        else:
+            result = CollectResult(fetched_urls=[url])
+            result.statuses = nflverse.parse_injuries(fetched.body)
+            if result.statuses:
+                yield f"nflverse injuries {season}", result
 
 
 def _fdcouk_units(
