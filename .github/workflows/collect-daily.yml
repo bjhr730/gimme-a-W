@@ -77,6 +77,21 @@ jobs:
       - name: NFL injury report from nflverse
         if: always()
         run: uv run gimme-collect run nflverse --seasons current --what injuries
+      # Soccer's only independent witness. Twelve European leagues as static
+      # CSVs, ~25 KB each, from an operation with no connection to ESPN -- which
+      # this week changed shape twice without saying so, both times silently.
+      #
+      # The comparison runs BEFORE the collection, not after. Writing fdcouk's
+      # rows first would fill in every result ESPN missed and then report a clean
+      # check -- the repair would hide the fault it was meant to expose. So: look
+      # at what ESPN alone produced, say what is wrong with it, then collect and
+      # let the merge fix what it can.
+      - name: Cross-check ESPN's soccer results against football-data.co.uk
+        if: always()
+        run: uv run gimme-collect crosscheck --league all --days 14
+      - name: Soccer results and closing odds from football-data.co.uk
+        if: always()
+        run: uv run gimme-collect run fdcouk --league all --seasons current
       - name: Recompute team form and Elo ratings
         if: always()
         run: uv run gimme-collect derive --what form,elo

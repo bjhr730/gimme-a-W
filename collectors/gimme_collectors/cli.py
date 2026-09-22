@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import os
 import sys
 import traceback
 from collections.abc import Iterator
@@ -128,6 +129,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--json", action="store_true", help="print parsed records as JSON")
     run.add_argument("--no-cache", action="store_true", help="bypass the on-disk HTTP cache")
+
+    check = sub.add_parser(
+        "crosscheck",
+        help="compare football-data.co.uk results against what is stored, and report",
+    )
+    check.add_argument("--league", action="append", default=[], help="slug, repeatable")
+    check.add_argument("--seasons", default="current")
+    check.add_argument("--days", type=int, default=14, help="how far back to compare")
+    check.add_argument("--strict", action="store_true", help="exit non-zero when a score disagrees")
 
     derive = sub.add_parser("derive", help="recompute derived tables from collected games")
     derive.add_argument("--what", default="form,elo", help="form | elo (comma separated)")
@@ -410,6 +420,81 @@ def cmd_live() -> int:
     return cmd_run(args)
 
 
+def cmd_crosscheck(args: argparse.Namespace) -> int:
+    """An independent witness to the scoreline for the twelve leagues it covers."""
+    import psycopg
+
+    from gimme_collectors import crosscheck
+
+    cfg = settings()
+    if not cfg.database_url:
+        print("DATABASE_URL is not set.", file=sys.stderr)
+        return 2
+    source = SOURCES["fdcouk"]
+    fetcher = Fetcher(
+        source["slug"],
+        cache_dir=cfg.cache_dir,
+        user_agent=cfg.user_agent,
+        rate_limit_per_min=source["rate"],
+        cache_ttl_seconds=0,
+    )
+    slugs = args.league or sorted(fdcouk.DIVISIONS)
+    if "all" in slugs:
+        slugs = sorted(fdcouk.DIVISIONS)
+    seasons = _parse_seasons(args.seasons)
+
+    totals = {"checked": 0, "agreed": 0}
+    disagreements: list[Any] = []
+    try:
+        with psycopg.connect(cfg.database_url) as conn:
+            for slug in slugs:
+                if slug not in fdcouk.DIVISIONS:
+                    continue
+                records = []
+                for season in seasons:
+                    try:
+                        fetched = fetcher.get(fdcouk.csv_url(slug, season))
+                    except Exception as exc:
+                        print(f"[{slug} {season}] skipped: {exc}")
+                        continue
+                    records.extend(fdcouk.parse_season(fetched.body, slug, season))
+                span = crosscheck.window(records, args.days)
+                if span is None:
+                    continue
+                stored = crosscheck.load_stored(conn, slug, *span)
+                names = crosscheck.load_team_names(conn, slug)
+                recent = [r for r in records if span[0] <= r.kickoff.date() <= span[1]]
+                report = crosscheck.compare(slug, recent, stored, names)
+                totals["checked"] += report.checked
+                totals["agreed"] += report.agreed
+                disagreements.extend(report.findings)
+                flag = "" if not report.findings else f"  <-- {len(report.findings)} to look at"
+                print(f"[{slug}] {report.agreed}/{report.checked} agree{flag}")
+    finally:
+        fetcher.close()
+
+    if disagreements:
+        print(f"\n{len(disagreements)} disagreements:")
+        for finding in disagreements:
+            print(finding.line())
+    print(
+        f"\ncross-check: {totals['agreed']}/{totals['checked']} results agree "
+        f"across {len(slugs)} leagues"
+    )
+    scores_differ = [f for f in disagreements if f.kind == "score"]
+    missing = [f for f in disagreements if f.kind in {"not_final", "unknown_game"}]
+    if (scores_differ or missing) and os.getenv("GITHUB_ACTIONS") == "true":
+        # Visible on the Actions page without failing the run and mailing about it.
+        summary = f"{len(scores_differ)} scorelines differ, {len(missing)} results missing"
+        print(f"::warning title=Cross-check found disagreements::{summary}")
+    if scores_differ and args.strict:
+        # A differing scoreline means one of the two sources is wrong about a
+        # result every model downstream is fitted on. Worth failing for.
+        print(f"{len(scores_differ)} scorelines disagree", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_derive(args: argparse.Namespace) -> int:
     cfg = settings()
     if not cfg.database_url:
@@ -450,6 +535,8 @@ def _dispatch(argv: list[str] | None) -> int:
         return cmd_run(args)
     if args.command == "derive":
         return cmd_derive(args)
+    if args.command == "crosscheck":
+        return cmd_crosscheck(args)
     if args.command == "live":
         return cmd_live()
     if args.command == "health":

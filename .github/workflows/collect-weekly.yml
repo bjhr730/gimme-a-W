@@ -37,9 +37,12 @@ jobs:
       - name: Current NFL season from nflverse (games, closing lines, player weeks)
         if: always()
         run: uv run gimme-collect run nflverse --seasons current --what games,players
-      - name: Current soccer seasons from football-data.co.uk (shots, corners, closing odds)
+      # The current season is collected daily now, alongside the cross-check.
+      # What is left for the weekly pass is the archive: seasons that have ended
+      # do not change, but a re-read repairs anything a failed run left behind.
+      - name: Recent soccer seasons from football-data.co.uk (shots, corners, closing odds)
         if: always()
-        run: uv run gimme-collect run fdcouk --league all --seasons current
+        run: uv run gimme-collect run fdcouk --league all --seasons 2023-2026
       - name: Recompute team form and Elo ratings
         if: always()
         run: uv run gimme-collect derive --what form,elo
