@@ -346,6 +346,21 @@ def _dispatch(argv: list[str] | None) -> int:
                 ours = m["log_loss_on_market_games"]
                 line += f" market={m['market_log_loss']} (ours on same games {ours})"
             print(line)
+        props = card.get("props") or {}
+        if props.get("graded"):
+            print(f"\nplayer props: {props['graded']} graded")
+            if props.get("predicted_but_did_not_play"):
+                print(f"  ({props['predicted_but_did_not_play']} of them never took the field)")
+            for market, m in sorted(props.get("markets", {}).items()):
+                if "brier_skill" not in m:
+                    print(f"  {market}: n={m['n']} {m.get('note', '')}")
+                    continue
+                verdict = "beats" if m["beats_base_rate"] else "LOSES TO"
+                print(
+                    f"  {market}: n={m['n']} base={m['base_rate']:.1%} "
+                    f"brier={m['brier']} vs {m['brier_base_rate']} base rate "
+                    f"-> skill={m['brier_skill']:+.4f} ({verdict} the base rate)"
+                )
         return 0
     return 2
 

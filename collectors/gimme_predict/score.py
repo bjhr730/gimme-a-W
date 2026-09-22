@@ -4,7 +4,8 @@ Back-tests say how a model *would* have done; this says how the predictions the
 site actually showed *did*. Each run stores one model_run row (model
 "scorecard") whose metrics hold, per competition over the window: games graded,
 log loss and accuracy of our published probability, and the same for the closing
-line when we have one. The models page shows the latest.
+line when we have one, plus a `props` section grading the player markets against
+the base rate. The models page shows the latest.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from gimme_predict import score_props
 from gimme_predict.models import brier, log_loss, multiclass_log_loss
 
 MODEL_NAME = "scorecard"
@@ -153,6 +155,10 @@ def scorecard(conn: psycopg.Connection[Any], *, days: int = 30) -> dict[str, Any
             result["competitions"][slug] = entry
             total_games += int(entry["games"])
     result["games"] = total_games
+    # The match markets are graded against the closing line above. The player
+    # props have no price to compare against, so they are graded against the base
+    # rate in their own section.
+    result["props"] = score_props.scorecard(conn, since)
     return result
 
 
