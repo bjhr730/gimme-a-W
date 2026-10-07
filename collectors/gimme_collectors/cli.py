@@ -149,6 +149,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="mark competitions active or retired to match what is actually collected",
     )
 
+    purge = sub.add_parser(
+        "purge",
+        help="delete retired competitions and everything that belonged only to them",
+    )
+    purge.add_argument("--league", action="append", default=[], help="slug, repeatable")
+    purge.add_argument(
+        "--yes", action="store_true", help="actually delete; without it this only reports"
+    )
+
     derive = sub.add_parser("derive", help="recompute derived tables from collected games")
     derive.add_argument("--what", default="form,elo", help="form | elo (comma separated)")
 
@@ -559,6 +568,40 @@ def cmd_competitions() -> int:
     return 0
 
 
+def cmd_purge(args: argparse.Namespace) -> int:
+    import psycopg
+
+    from gimme_collectors import purge as purge_module
+
+    cfg = settings()
+    if not cfg.database_url:
+        print("DATABASE_URL is not set.", file=sys.stderr)
+        return 2
+    slugs = args.league or None
+    with psycopg.connect(cfg.database_url) as conn:
+        with conn.cursor() as cur:
+            retired = purge_module._retired(cur, slugs)
+            if not retired:
+                print("nothing to purge: no inactive competitions")
+                return 0
+            print("would delete these competitions and everything under them:")
+            for _cid, slug in sorted(retired, key=lambda r: r[1]):
+                print(f"  {slug}")
+            counts = purge_module.plan(cur, [cid for cid, _ in retired])
+        print()
+        for table, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+            if n:
+                print(f"  {table:24} {n:>9,}")
+        if not args.yes:
+            print("\nnothing deleted. Pass --yes to go ahead.")
+            return 0
+        removed = purge_module.purge(conn, slugs)
+    print("\ndeleted:")
+    for table, n in sorted(removed.items(), key=lambda kv: -kv[1]):
+        print(f"  {table:28} {n:>9,}")
+    return 0
+
+
 def cmd_derive(args: argparse.Namespace) -> int:
     cfg = settings()
     if not cfg.database_url:
@@ -603,6 +646,8 @@ def _dispatch(argv: list[str] | None) -> int:
         return cmd_crosscheck(args)
     if args.command == "competitions":
         return cmd_competitions()
+    if args.command == "purge":
+        return cmd_purge(args)
     if args.command == "health":
         cfg = settings()
         if not cfg.database_url:
