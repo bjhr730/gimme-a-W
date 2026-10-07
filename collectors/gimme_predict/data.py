@@ -44,10 +44,28 @@ class Game:
         return self.home_score - self.away_score
 
 
-def load_games(conn: psycopg.Connection[Any], competition_slug: str) -> list[Game]:
+# How far back a prediction run reads. The soccer model halves a game's weight
+# every 180 days, so a game a year old already counts for a quarter and one four
+# years old for four thousandths -- rows paid for on the wire and then multiplied
+# by nothing. Back-tests pass None and get the whole archive.
+HISTORY_DAYS = 365
+
+
+def load_games(
+    conn: psycopg.Connection[Any],
+    competition_slug: str,
+    *,
+    history_days: int | None = HISTORY_DAYS,
+) -> list[Game]:
+    where = ["c.slug = %s", "g.status IN ('final', 'scheduled', 'in_progress')"]
+    params: list[Any] = [competition_slug]
+    if history_days is not None:
+        # only the past is bounded: every fixture ahead still has to come through
+        where.append("g.kickoff >= now() - make_interval(days => %s)")
+        params.append(history_days)
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
-            """
+            f"""
             SELECT g.id, c.slug AS competition, c.sport_id AS sport, g.season_id, s.label,
                    g.kickoff, g.home_team_id, g.away_team_id, ht.name AS home_name,
                    at.name AS away_name, ht.abbreviation AS home_abbr, at.abbreviation AS away_abbr,
@@ -57,10 +75,10 @@ def load_games(conn: psycopg.Connection[Any], competition_slug: str) -> list[Gam
             JOIN season s ON s.id = g.season_id
             JOIN team ht ON ht.id = g.home_team_id
             JOIN team at ON at.id = g.away_team_id
-            WHERE c.slug = %s AND g.status IN ('final', 'scheduled', 'in_progress')
+            WHERE {" AND ".join(where)}
             ORDER BY g.kickoff, g.id
             """,
-            (competition_slug,),
+            params,
         )
         games = [
             Game(

@@ -2,8 +2,12 @@ name: Collect (ESPN)
 
 on:
   schedule:
-    # Four times a day, UTC. Covers European afternoons and US evenings.
-    - cron: "15 5,11,17,23 * * *"
+    # Two schedules, not one. Scores need collecting through the day; nothing
+    # else does. Re-deriving Elo, refitting every model and regrading the last
+    # thirty days four times over produced the same answer four times and read
+    # about 18 MB of the monthly transfer allowance each time.
+    - cron: "15 5 * * *" # the full pass: collect, derive, predict, grade
+    - cron: "15 11,17,23 * * *" # collection only
   workflow_dispatch:
     inputs:
       league:
@@ -23,8 +27,7 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    # Collect, derive and predict across 21 competitions with a full season of
-    # lineups behind them. The old 45 minutes was set when there was far less data.
+    # Collect, derive and predict across the active competitions.
     timeout-minutes: 120
     defaults:
       run:
@@ -33,6 +36,9 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       COLLECTOR_USER_AGENT: ${{ vars.COLLECTOR_USER_AGENT }}
       CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+      # Everything except the collection-only schedule is a full pass, so a
+      # manual run does the lot.
+      FULL_PASS: ${{ github.event.schedule != '15 11,17,23 * * *' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -55,27 +61,24 @@ jobs:
       # day at a time and soccer a month at a time -- so three weeks of soccer is
       # one or two requests per league, not twenty-two.
       - name: Re-read the last three weeks so a missed run cannot leave a gap
-        if: always()
-        run: |
-          if [ "$(date -u +%H)" = "05" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            uv run gimme-collect run espn --kind scoreboard --league all --date "$(date -u -d '21 days ago' +%F)" --days 22
-          else
-            echo "Skipped: the three-week re-read runs on the 05:15 UTC pass."
-          fi
+        if: always() && env.FULL_PASS == 'true'
+        run: >-
+          uv run gimme-collect run espn --kind scoreboard --league all
+          --date "$(date -u -d '21 days ago' +%F)" --days 22
       # College football is the one competition ESPN served alone, and the results
       # showed it. CFBD is its nflverse: documented, keyed, and authoritative on
       # scores. Games land on the rows ESPN already created (name-matched teams,
       # kickoff within 36 hours), so this adds results and lines rather than
       # duplicates. Skipped silently until the free key is in the repo secrets.
       - name: College football games and betting lines from CollegeFootballData
-        if: always() && env.CFBD_API_KEY != ''
+        if: always() && env.FULL_PASS == 'true' && env.CFBD_API_KEY != ''
         run: uv run gimme-collect run cfbd --seasons current --what games,lines
       # The NFL injury report moves Wednesday to Friday, so the Tuesday nflverse
       # run is stale by kickoff. This is the league's own report -- designation
       # plus practice participation, which the ESPN injuries page does not carry --
       # and it is one small CSV, so it can run with the rest.
       - name: NFL injury report from nflverse
-        if: always()
+        if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-collect run nflverse --seasons current --what injuries
       # Soccer's only independent witness. Twelve European leagues as static
       # CSVs, ~25 KB each, from an operation with no connection to ESPN -- which
@@ -87,24 +90,24 @@ jobs:
       # at what ESPN alone produced, say what is wrong with it, then collect and
       # let the merge fix what it can.
       - name: Cross-check ESPN's soccer results against football-data.co.uk
-        if: always()
+        if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-collect crosscheck --league all --days 14
       - name: Soccer results and closing odds from football-data.co.uk
-        if: always()
+        if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-collect run fdcouk --league all --seasons current
       - name: Recompute team form and Elo ratings
-        if: always()
+        if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-collect derive --what form,elo
       - name: Predict games in the coming eight days
-        if: always()
+        if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-predict run --days 8
       - name: Grade published predictions against results (last 30 days)
-        if: always()
+        if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-predict score --days 30
       # Each pass writes a complete fresh set of predictions. Without this the old
       # ones accumulated at about 70 MB a day and refilled the 512 MB project.
       - name: Drop predictions a newer run has superseded
-        if: always()
+        if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-predict prune
       - name: Health check (fails the run, and emails you, when data stops flowing)
         if: always()

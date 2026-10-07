@@ -90,7 +90,9 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     markets = {m.strip() for m in args.markets.split(",")}
     with psycopg.connect(cfg.database_url) as conn:
         for slug in _competitions(args):
-            games = data.load_games(conn, slug)
+            # a back-test walks season by season, so it needs the archive the
+            # nightly run is deliberately kept away from
+            games = data.load_games(conn, slug, history_days=None)
             if not games:
                 print(f"[{slug}] no games")
                 continue

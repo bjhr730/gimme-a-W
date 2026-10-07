@@ -20,12 +20,12 @@ from gimme_predict.data import Game
 
 ROLL_N = 8
 
-# How far back the loaders read. Form is a rolling window of ROLL_N games and the
-# fitted models want a few seasons behind that, not the whole archive: four years
-# covers three complete seasons plus the one in progress in every competition
-# here. The unbounded read is what put the database over its transfer allowance --
-# it walked every final game ever recorded, per competition, four times a day.
-HISTORY_DAYS = 4 * 365
+# How far back the loaders read. Form is a rolling window of ROLL_N games, so the
+# features themselves never look further than the last handful; the window exists
+# for the fitted models behind them. A year is one full season everywhere here,
+# which is what the owner asked for and keeps the read small. Back-tests pass
+# None and get the whole archive.
+HISTORY_DAYS = 365
 
 
 @dataclass
