@@ -74,13 +74,21 @@ interface (`fetch → parse → normalize → upsert`) and emit the unified doma
 
 ### Structured sources the models depend on
 
+**Attribution and terms.** This is a personal, non-commercial project. The data
+belongs to the people who publish it: football-data.org and CollegeFootballData
+both issue a personal token and ask to be credited; football-data.co.uk is free
+to use and asks that it not be resold; nflverse is open data. The deployed site
+sends `noindex` and a `robots.txt` that disallows everything, because an indexed
+public site is redistribution rather than personal use. Nothing here is betting
+advice, and none of it is affiliated with any league, club or provider.
+
 | Source | Covers | Key | Free tier | Feeds which predictions |
 |---|---|---|---|---|
 | [nflverse](https://github.com/nflverse/nflverse-data) | NFL play-by-play, targets, carries, snap counts, rosters, injuries (CSV/parquet) | No | Unlimited (static files) | Win probability, anytime TD, passing/rushing/receiving yards |
 | [CollegeFootballData.com](https://collegefootballdata.com) | NCAAF games, drives, plays, player stats, SP+ and Elo ratings, betting lines | Yes (free) | Generous | Same markets for college football |
 | [football-data.co.uk](https://www.football-data.co.uk/data.php) | Historical CSVs since 1993 for 22+ leagues: results, **shots on target, corners**, closing odds | No | Unlimited (static files) | Back-testing of 1X2, totals, corners and shots models |
-| [Understat](https://understat.com) | Shot-level xG for the top-5 leagues (via `soccerdata`) | No | Be polite | Goals, goalscorer, shots on target |
-| [football-data.org](https://www.football-data.org) | Fixtures, standings and scorers for 12 major soccer competitions | Yes (free) | 10 req/min | Fixture list, lineups |
+| [ESPN](https://www.espn.com) | NFL and college football scores, teams, standings, injuries | No | Undocumented | American football only — soccer moved off it in Oct 2026 |
+| [football-data.org](https://www.football-data.org) | **All soccer fixtures, results and tables** — one request per competition returns a whole season | Yes (free) | 10 req/min | Every soccer market |
 | [The Odds API](https://the-odds-api.com) | Bookmaker lines for all three sports | Yes | 500 req/month | Market baseline every model is measured against |
 
 ---

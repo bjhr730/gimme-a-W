@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Barlow_Condensed, Source_Sans_3 } from "next/font/google";
 import { BackToTop } from "@/components/back-to-top";
+import { Footer } from "@/components/footer";
 import { Nav } from "@/components/nav";
 import { ServiceWorker } from "@/components/service-worker";
 import "./globals.css";
@@ -28,6 +29,9 @@ export const metadata: Metadata = {
   // declaring any icon here replaces the app/icon.svg file convention, so the
   // favicon has to be named too or nothing links it
   icons: { icon: "/icon.svg", apple: "/icon-192.png" },
+  // A personal project built on other people's data. robots.txt asks crawlers to
+  // stay out; this tells the ones that crawl anyway not to index what they find.
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {
@@ -52,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main tabIndex={-1} className="mx-auto w-full max-w-5xl px-3 pt-3 outline-none sm:px-5 sm:pt-5">
           {children}
         </main>
+        <Footer />
         <BackToTop />
         <ServiceWorker />
       </body>
