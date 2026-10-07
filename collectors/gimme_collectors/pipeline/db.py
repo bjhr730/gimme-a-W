@@ -345,13 +345,21 @@ class Writer:
             self._teams_refreshed.add(team_id)
             cur.execute(
                 """
-                UPDATE team SET name = %s, short_name = COALESCE(%s, short_name),
+                UPDATE team SET
+                    -- A source that finds teams by name is, by construction, not
+                    -- authoritative about naming: it is matching into someone
+                    -- else's. football-data.org publishes formal registered names
+                    -- ("Arsenal FC", "Sporting Clube de Braga") and overwrote the
+                    -- stored ones, leaving the league list half formal and half not.
+                    name = CASE WHEN %s THEN name ELSE %s END,
+                    short_name = COALESCE(%s, short_name),
                     abbreviation = COALESCE(%s, abbreviation), location = COALESCE(%s, location),
                     logo_url = COALESCE(%s, logo_url), color = COALESCE(%s, color),
                     alt_color = COALESCE(%s, alt_color), updated_at = now()
                 WHERE id = %s
                 """,
                 (
+                    t.match_by_name,
                     t.name,
                     t.short_name,
                     t.abbreviation,
