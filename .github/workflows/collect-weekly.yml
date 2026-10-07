@@ -17,7 +17,12 @@ concurrency:
 jobs:
   weekly:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # This was being killed at 90 minutes -- the last run hit 95 and was
+    # cancelled mid-flight. Nearly all of it was ESPN rosters for nineteen soccer
+    # competitions, which no longer happens: rosters are the NFL and college
+    # football only now. If 60 is not enough, the right answer is to find out
+    # why rather than to raise it again.
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: collectors
@@ -30,6 +35,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen --no-dev
+      # ESPN is American football only now, so this is two competitions.
       - name: Rosters for every team (ESPN)
         run: |
           uv run gimme-collect run espn --kind roster \

@@ -27,8 +27,12 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    # Collect, derive and predict across the active competitions.
-    timeout-minutes: 120
+    # Collect, derive and predict across the active competitions. The ceiling is
+    # a budget, not an estimate: on a private repo Actions minutes are metered,
+    # and a run that hangs should cost an hour rather than two. Observed p90 was
+    # 53 minutes when ESPN served nineteen soccer competitions; it now serves
+    # none of them.
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: collectors
