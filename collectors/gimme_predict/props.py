@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -42,6 +43,40 @@ class PropsOutput:
 
 
 # ------------------------------------------------------------ football
+
+
+# Props are published for the players anyone would look up, not for everyone who
+# touched the ball. A team's props were running to dozens of lines, most of them
+# backups the model projected a handful of yards for; graded over thirty days, a
+# quarter of all published player props were for players who never took the
+# field at all.
+PROPS_PER_TEAM = 5
+
+
+def top_by_involvement(
+    rows: list[football_players.PlayerProp],
+) -> list[football_players.PlayerProp]:
+    """Keep the most involved players on each side, with all of their markets.
+
+    Involvement is projected yardage, which ranks a side roughly as a reader
+    would: the quarterback, the backs who carry it, the receivers who are thrown
+    to. Anytime-touchdown probability is deliberately not added in -- it is on a
+    different scale, and a goal-line back is not more involved than a starter.
+    """
+    yards: dict[tuple[int, int], float] = {}
+    squads: dict[tuple[int, int], set[int]] = defaultdict(set)
+    for row in rows:
+        player = (row.game_id, row.player_id)
+        yards.setdefault(player, 0.0)
+        if row.market.endswith("_yards") and row.mean:
+            yards[player] += float(row.mean)
+        squads[(row.game_id, row.team_id)].add(row.player_id)
+
+    keep: set[tuple[int, int]] = set()
+    for (game_id, _team_id), players in squads.items():
+        ranked = sorted(players, key=lambda pid: -yards[(game_id, pid)])
+        keep.update((game_id, pid) for pid in ranked[:PROPS_PER_TEAM])
+    return [r for r in rows if (r.game_id, r.player_id) in keep]
 
 
 def predict_football(
@@ -95,6 +130,7 @@ def predict_football(
                     out.flagged += 1
                     apply_status(projected, status)
                 out.football.extend(projected)
+    out.football = top_by_involvement(out.football)
     return out
 
 
