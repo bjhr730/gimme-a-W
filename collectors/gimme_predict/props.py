@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import numpy as np
 import psycopg
 
 from gimme_predict import availability, data
-from gimme_predict.markets import football_players, soccer, soccer_props
+from gimme_predict.markets import football_players, soccer_props
 from gimme_predict.models import log_loss
 from gimme_predict.players import (
-    Rolling,
     football_values,
     load_player_games,
     load_rosters,
@@ -33,7 +31,6 @@ LINEUP_FALLBACK_WINDOW = timedelta(days=75)
 class PropsOutput:
     football: list[football_players.PlayerProp] = field(default_factory=list)
     team_counts: list[soccer_props.TeamProp] = field(default_factory=list)
-    scorers: list[soccer_props.ScorerProp] = field(default_factory=list)
     train_size: dict[str, int] = field(default_factory=dict)
     # players withheld because a source reports them out, and players kept but
     # flagged as a doubt; both are reported in the model run's metrics.
@@ -41,22 +38,7 @@ class PropsOutput:
     flagged: int = 0
 
     def count(self) -> int:
-        return len(self.football) + len(self.team_counts) + len(self.scorers)
-
-
-# Props are published for the players anyone would look up, not for the whole
-# squad. Graded over 30 days, a quarter of all published player props were for
-# players who never took the field -- mostly the tail of defenders and
-# substitutes the model rated at a few per cent and listed anyway. Keeping the
-# most involved few per side drops that tail, roughly halves the rows written and
-# read, and loses nothing a reader wanted.
-PROPS_PER_TEAM = 5
-
-
-def top_by_involvement(squad: list[Any]) -> list[Any]:
-    """The most involved players on one team, by expected goals plus shots."""
-    ranked = sorted(squad, key=lambda p: p.expected_goals + p.expected_sot, reverse=True)
-    return ranked[:PROPS_PER_TEAM]
+        return len(self.football) + len(self.team_counts)
 
 
 # ------------------------------------------------------------ football
@@ -218,8 +200,18 @@ def backtest_football(
 
 
 def predict_soccer(
-    conn: psycopg.Connection[Any], slug: str, upcoming: list[data.Game], games: list[data.Game]
+    conn: psycopg.Connection[Any],
+    slug: str,
+    upcoming: list[data.Game],
+    games: list[data.Game],
 ) -> PropsOutput | None:
+    """Shots on target and corners per team. Nothing per player.
+
+    `games` is unused: it fed an expected-goals fit that existed only to split a
+    team's total across its players. The match model still runs, separately --
+    this no longer refits it.
+    """
+    del games
     team_rows = load_team_games(conn, slug)
     out = PropsOutput()
     counts_model = soccer_props.train(team_rows) if team_rows else None
@@ -227,78 +219,10 @@ def predict_soccer(
         out.train_size.update(counts_model.train_size)
         for g in upcoming:
             out.team_counts.extend(soccer_props.predict_counts(counts_model, g))
-    # expected goals per team: Dixon-Coles when it fits, else rolling goals
-    xg_model = soccer.train(games)
-    xg: dict[int, tuple[float, float]] = {}
-    if xg_model is not None:
-        for p in soccer.predict(xg_model, upcoming):
-            xg[p.game_id] = (p.lam, p.mu)
-    else:
-        state = counts_model.state if counts_model else {}
-        for g in upcoming:
-            h = state.get(g.home_id)
-            a = state.get(g.away_id)
-            xg[g.id] = (
-                (sum(h.goals) / len(h.goals)) if h and h.goals else 1.4,
-                (sum(a.goals) / len(a.goals)) if a and a.goals else 1.1,
-            )
-    # Player form follows the club, not the competition: a cup tie in September
-    # has no history of its own, while the clubs in it have played a league month.
-    squad_ids = sorted({t for g in upcoming for t in (g.home_id, g.away_id)})
-    player_rows = load_player_games(conn, team_ids=squad_ids)
-    if player_rows:
-        threat = soccer_props.player_threat(player_rows)
-        team_games: dict[int, list[int]] = defaultdict(list)
-        for pg in player_rows:
-            if pg.game_id not in team_games[pg.team_id]:
-                team_games[pg.team_id].append(pg.game_id)
-        team_ids = sorted({t for g in upcoming for t in (g.home_id, g.away_id)})
-        rosters = load_rosters(conn, team_ids)
-        statuses = availability.load(conn, team_ids)
-        # A player reported out takes no share of the team's goals or shots, so
-        # the rest of the squad absorbs it. Anyone with no report is left alone.
-        play_probability = {
-            pid: (0.0 if st.out else st.play_probability if st.doubt else 1.0)
-            for pid, st in statuses.items()
-        }
-        out.withheld += sum(1 for st in statuses.values() if st.out)
-        out.flagged += sum(1 for st in statuses.values() if st.doubt)
-        # A club with no roster pull still needs markets, so a recent appearance can
-        # stand in for a roster row. Two limits keep last season's squad out: the
-        # player must not be registered anywhere, since the roster already knows
-        # where he is, and the appearance must be recent enough to mean something.
-        cutoff = datetime.now(UTC) - LINEUP_FALLBACK_WINDOW
-        recent = [pg for pg in player_rows if pg.kickoff >= cutoff]
-        registered = rostered_anywhere(conn, sorted({pg.player_id for pg in recent}))
-        for pg in recent:
-            if pg.player_id in registered:
-                continue
-            lst = rosters.setdefault(pg.team_id, [])
-            if all(r["player_id"] != pg.player_id for r in lst):
-                lst.append(
-                    {"player_id": pg.player_id, "full_name": pg.name, "position": pg.position}
-                )
-        # expected shots on target per team, so player shares add back to the team
-        team_sot = {
-            (t.game_id, t.team_id): t.mean
-            for t in out.team_counts
-            if t.market == "shots_on_target" and t.team_id is not None
-        }
-        for g in upcoming:
-            lam, mu = xg.get(g.id, (1.4, 1.1))
-            for team_id, team_xg in ((g.home_id, lam), (g.away_id, mu)):
-                window = min(len(team_games.get(team_id, [])), Rolling().n)
-                squad = soccer_props.predict_players(
-                    g,
-                    team_id=team_id,
-                    team_xg=team_xg,
-                    team_sot=team_sot.get((g.id, team_id)),
-                    roster=rosters.get(team_id, []),
-                    threat=threat,
-                    team_games_window=window,
-                    play_probability=play_probability,
-                )
-                out.scorers.extend(top_by_involvement(squad))
+    # No player markets in soccer. The team counts above -- shots on target and
+    # corners per side -- are what this competition publishes now. Dropping the
+    # player half also drops the heaviest read in the pipeline: a squad's whole
+    # box-score history, loaded across every competition its clubs play in.
     return out if out.count() else None
 
 

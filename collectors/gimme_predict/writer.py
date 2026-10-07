@@ -246,53 +246,6 @@ class PredictionWriter:
                         mean=t.mean,
                         line=line,
                     )
-            for s in props.scorers:
-                self._subject_prediction(
-                    cur,
-                    run_id,
-                    s.game_id,
-                    "anytime_scorer",
-                    "player",
-                    s.player_id,
-                    "yes",
-                    probability=s.probability,
-                    mean=s.expected_goals,
-                    explanation=s.explanation,
-                )
-                # No anytime_assist. Graded over 7,629 published predictions it
-                # scored a Brier skill of -0.0096: worse than giving every player
-                # the competition's average assist rate. An assist depends on who
-                # else finishes the move, which is not something this model sees.
-                # The expectation is still computed and still shown on the player
-                # page; it is not published as a probability anyone should bet on.
-                if s.expected_sot > 0:
-                    self._subject_prediction(
-                        cur,
-                        run_id,
-                        s.game_id,
-                        "player_shots_on_target",
-                        "player",
-                        s.player_id,
-                        "",
-                        mean=s.expected_sot,
-                        explanation=s.explanation,
-                    )
-                    for selection, probability, line in (
-                        ("over 0.5", s.sot_probability, 0.5),
-                        ("over 1.5", s.sot_two_probability, 1.5),
-                    ):
-                        self._subject_prediction(
-                            cur,
-                            run_id,
-                            s.game_id,
-                            "player_shots_on_target",
-                            "player",
-                            s.player_id,
-                            selection,
-                            probability=probability,
-                            mean=s.expected_sot,
-                            line=line,
-                        )
         self.conn.commit()
 
     def _subject_prediction(

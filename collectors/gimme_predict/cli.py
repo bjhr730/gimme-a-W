@@ -220,15 +220,13 @@ def cmd_run(args: argparse.Namespace) -> int:
                 else:
                     print(
                         f"[{slug}] props: {len(output.football)} player lines, "
-                        f"{len(output.team_counts)} team counts, {len(output.scorers)} scorers"
+                        f"{len(output.team_counts)} team counts"
                         + (
                             f", {output.withheld} withheld as out, {output.flagged} flagged"
                             if output.withheld or output.flagged
                             else ""
                         )
                     )
-                    for s in output.scorers[:3]:
-                        print(f"    scorer {s.name} {s.probability:.0%}")
                     for p in output.football[:3]:
                         value = p.mean if p.mean is not None else p.probability
                         print(f"    {p.name} {p.market} {value}")
