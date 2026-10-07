@@ -1,4 +1,4 @@
-name: Collect (ESPN)
+name: Collect
 
 on:
   schedule:
@@ -36,6 +36,7 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       COLLECTOR_USER_AGENT: ${{ vars.COLLECTOR_USER_AGENT }}
       CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+      FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
       # Everything except the collection-only schedule is a full pass, so a
       # manual run does the lot.
       FULL_PASS: ${{ github.event.schedule != '15 11,17,23 * * *' }}
@@ -45,14 +46,27 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen --no-dev
-      - name: Collect scoreboard, teams, standings, injuries and game summaries
+      - name: NFL and college football from ESPN (scores, teams, standings, injuries)
         run: |
           uv run gimme-collect run espn \
             --kind all \
             --league "${{ github.event.inputs.league || 'all' }}" \
             --date "${{ github.event.inputs.date || 'yesterday' }}" \
             --days "${{ github.event.inputs.days || '3' }}"
-      - name: Fixtures for the next ten days
+      # Soccer, from a documented API under a licence. One request per
+      # competition returns the whole season -- every fixture and every result --
+      # so nine competitions cost nine calls for matches and nine for tables,
+      # inside the free tier's ten a minute. ESPN served none of this legitimately
+      # and, in one month, broke twice without saying so.
+      - name: Soccer fixtures and results from football-data.org
+        if: always() && env.FOOTBALL_DATA_API_KEY != ''
+        run: uv run gimme-collect run football-data --league all --kind scoreboard --seasons current
+      # Tables only move when matches finish, and the matches above already
+      # carry the results, so once a day is enough for the standing rows.
+      - name: Soccer tables from football-data.org
+        if: always() && env.FULL_PASS == 'true' && env.FOOTBALL_DATA_API_KEY != ''
+        run: uv run gimme-collect run football-data --league all --kind standings --seasons current
+      - name: Football fixtures for the next ten days
         if: always()
         run: uv run gimme-collect run espn --kind scoreboard --league all --date today --days 10
       # A missed or failed run used to leave a hole in the season that nothing
@@ -60,7 +74,7 @@ jobs:
       # day is enough. Since ESPN dropped range requests, football is fetched a
       # day at a time and soccer a month at a time -- so three weeks of soccer is
       # one or two requests per league, not twenty-two.
-      - name: Re-read the last three weeks so a missed run cannot leave a gap
+      - name: Re-read football's last three weeks so a missed run cannot leave a gap
         if: always() && env.FULL_PASS == 'true'
         run: >-
           uv run gimme-collect run espn --kind scoreboard --league all
@@ -80,16 +94,14 @@ jobs:
       - name: NFL injury report from nflverse
         if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-collect run nflverse --seasons current --what injuries
-      # Soccer's only independent witness. Twelve European leagues as static
-      # CSVs, ~25 KB each, from an operation with no connection to ESPN -- which
-      # this week changed shape twice without saying so, both times silently.
+      # The second witness. football-data.co.uk publishes the same results as
+      # static CSVs from an unrelated operation, and it is also where shots,
+      # corners and closing odds come from now that ESPN is gone.
       #
-      # The comparison runs BEFORE the collection, not after. Writing fdcouk's
-      # rows first would fill in every result ESPN missed and then report a clean
-      # check -- the repair would hide the fault it was meant to expose. So: look
-      # at what ESPN alone produced, say what is wrong with it, then collect and
-      # let the merge fix what it can.
-      - name: Cross-check ESPN's soccer results against football-data.co.uk
+      # The comparison runs BEFORE the collection, not after. Writing those rows
+      # first would fill in every result the primary source missed and then report
+      # a clean check -- the repair would hide the fault it was meant to expose.
+      - name: Cross-check soccer results against football-data.co.uk
         if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-collect crosscheck --league all --days 14
       - name: Soccer results and closing odds from football-data.co.uk

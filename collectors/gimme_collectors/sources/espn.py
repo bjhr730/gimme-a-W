@@ -76,6 +76,9 @@ class League:
         )
 
 
+# Soccer moved to football-data.org, which is documented, licensed and cheaper
+# to read. These stay defined because existing rows carry ESPN uids and because
+# a slug can still be asked for by name, but none of them is collected.
 def _soccer(
     slug: str, name: str, country: str | None, level: str = "club", *, active: bool = True
 ) -> League:
@@ -116,17 +119,17 @@ LEAGUES: dict[str, League] = {
             standings_params={"group": "80"},
             uid_prefix="s:20~l:23",
         ),
-        _soccer("eng.1", "English Premier League", "England"),
+        _soccer("eng.1", "English Premier League", "England", active=False),
         _soccer("eng.2", "English Championship", "England", active=False),
-        _soccer("esp.1", "Spanish LALIGA", "Spain"),
-        _soccer("ita.1", "Italian Serie A", "Italy"),
-        _soccer("ger.1", "German Bundesliga", "Germany"),
-        _soccer("fra.1", "French Ligue 1", "France"),
-        _soccer("ned.1", "Dutch Eredivisie", "Netherlands"),
-        _soccer("por.1", "Portuguese Primeira Liga", "Portugal"),
-        _soccer("usa.1", "MLS", "USA"),
-        _soccer("mex.1", "Liga MX", "Mexico"),
-        _soccer("arg.1", "Argentine Liga Profesional", "Argentina"),
+        _soccer("esp.1", "Spanish LALIGA", "Spain", active=False),
+        _soccer("ita.1", "Italian Serie A", "Italy", active=False),
+        _soccer("ger.1", "German Bundesliga", "Germany", active=False),
+        _soccer("fra.1", "French Ligue 1", "France", active=False),
+        _soccer("ned.1", "Dutch Eredivisie", "Netherlands", active=False),
+        _soccer("por.1", "Portuguese Primeira Liga", "Portugal", active=False),
+        _soccer("usa.1", "MLS", "USA", active=False),
+        _soccer("mex.1", "Liga MX", "Mexico", active=False),
+        _soccer("arg.1", "Argentine Liga Profesional", "Argentina", active=False),
         _soccer("bra.1", "Brazilian Serie A", "Brazil", active=False),
         _soccer("uefa.champions", "UEFA Champions League", None, active=False),
         _soccer("uefa.europa", "UEFA Europa League", None, active=False),

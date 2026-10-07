@@ -23,7 +23,7 @@ from gimme_collectors import quota
 from gimme_collectors.config import settings
 from gimme_collectors.models import CollectResult
 from gimme_collectors.pipeline.fetch import Fetcher
-from gimme_collectors.sources import cfbd, espn, fdcouk, nflverse
+from gimme_collectors.sources import cfbd, espn, fdcouk, football_data, nflverse
 
 KINDS = {"scoreboard", "teams", "standings", "summary", "roster", "injuries"}
 DAILY_KINDS = {"scoreboard", "teams", "standings", "summary", "injuries"}  # `all`; rosters weekly
@@ -53,6 +53,12 @@ SOURCES: dict[str, dict[str, Any]] = {
         "name": cfbd.SOURCE_NAME,
         "base_url": cfbd.BASE_URL,
         "rate": cfbd.RATE_LIMIT_PER_MIN,
+    },
+    "football-data": {
+        "slug": football_data.SOURCE_SLUG,
+        "name": football_data.SOURCE_NAME,
+        "base_url": football_data.BASE_URL,
+        "rate": football_data.RATE_LIMIT_PER_MIN,
     },
 }
 
@@ -282,11 +288,54 @@ def _cfbd_units(args: argparse.Namespace, fetcher: Fetcher) -> Iterator[tuple[st
                 yield f"cfbd games {year} {season_type}", result
 
 
+def _football_data_units(
+    args: argparse.Namespace, fetcher: Fetcher
+) -> Iterator[tuple[str, CollectResult]]:
+    """One request per competition for a whole season of fixtures and results.
+
+    Their free tier allows ten calls a minute, so the fetcher is throttled to it
+    and a full pass over nine competitions is eighteen calls -- matches and
+    standings each.
+    """
+    kinds = {k.strip() for k in args.kind.split(",") if k.strip()} or {"scoreboard"}
+    if "all" in kinds:
+        kinds = {"scoreboard", "standings"}
+    slugs = args.league or football_data.active_slugs()
+    if "all" in slugs:
+        slugs = football_data.active_slugs()
+    seasons = _parse_seasons(args.seasons)
+    for slug in slugs:
+        if slug not in football_data.COMPETITIONS:
+            print(f"[{slug}] not on football-data.org; known: {football_data.active_slugs()}")
+            continue
+        for season in seasons:
+            result = CollectResult()
+            if "scoreboard" in kinds:
+                url = football_data.matches_url(slug, season)
+                try:
+                    payload, _ = fetcher.get_json(url)
+                    result.games = football_data.parse_matches(payload, slug)
+                    result.fetched_urls.append(url)
+                except Exception as exc:
+                    print(f"[{slug} {season}] matches skipped: {exc}")
+            if "standings" in kinds:
+                url = football_data.standings_url(slug, season)
+                try:
+                    payload, _ = fetcher.get_json(url)
+                    result.standings = football_data.parse_standings(payload, slug)
+                    result.fetched_urls.append(url)
+                except Exception as exc:
+                    print(f"[{slug} {season}] standings skipped: {exc}")
+            if result.games or result.standings:
+                yield f"football-data {slug} {season}", result
+
+
 UNITS = {
     "espn": _espn_units,
     "nflverse": _nflverse_units,
     "fdcouk": _fdcouk_units,
     "cfbd": _cfbd_units,
+    "football-data": _football_data_units,
 }
 
 
@@ -295,6 +344,15 @@ def cmd_run(args: argparse.Namespace) -> int:
     source = SOURCES[args.source]
 
     auth: dict[str, str] | None = None
+    if args.source == "football-data":
+        if not cfg.football_data_api_key:
+            print(
+                "FOOTBALL_DATA_API_KEY is not set. Register free at football-data.org "
+                "and put the token in .env (and in the repo secrets for CI).",
+                file=sys.stderr,
+            )
+            return 2
+        auth = football_data.auth_headers(cfg.football_data_api_key)
     if args.source == "cfbd":
         if not cfg.cfbd_api_key:
             print(

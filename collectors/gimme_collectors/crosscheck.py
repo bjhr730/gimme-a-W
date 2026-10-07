@@ -1,16 +1,15 @@
 """Check a second source's results against what is already stored.
 
-Soccer runs on ESPN's unofficial API for everything: fixtures, results, lineups,
-injuries, across nineteen competitions. Twice in one week that API changed shape
-without warning and did it silently -- a 200 and an empty list, not an error. The
-collector cannot tell the difference between "no games that day" and "the
-endpoint moved".
+Soccer comes from football-data.org. It is documented and licensed, which ESPN
+never was, but it is still one source: if it goes quiet, or publishes a wrong
+scoreline, nothing else in the pipeline would notice. A 200 and an empty list is
+indistinguishable from "no games today".
 
-football-data.co.uk can. It publishes the same results for twelve European
-leagues as static CSVs, free, from a completely separate operation. It is not a
-replacement -- no lineups, no players, no South America -- but it is an
-independent witness to the scoreline, which is the one thing everything else is
-built on.
+football-data.co.uk is the second opinion. It publishes the same results for
+twelve European leagues as static CSVs, free, from a completely separate
+operation, and it is also where shots, corners and closing odds come from. It is
+an independent witness to the scoreline, which is the one thing everything else
+is built on.
 
 The writer already merges a second source's copy of a known game, filling gaps
 and never blanking out what the first source had. That is the right behaviour for

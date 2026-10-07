@@ -18,15 +18,15 @@ import psycopg
 
 from gimme_collectors import quota
 from gimme_collectors.config import settings
-from gimme_collectors.sources import espn
+from gimme_collectors.sources import espn, football_data
 from gimme_predict import data, evaluate, players, props
 from gimme_predict.features import build_features
 from gimme_predict.markets import football, football_players, soccer, soccer_props
 
-# One list, in espn.py. The predictor used to keep its own copy, which is how a
-# competition gets collected and never predicted, or the reverse.
+# Each sport's list lives with the source that collects it, so a competition
+# cannot be collected and never predicted, or the reverse.
 FOOTBALL_DEFAULT = espn.active_leagues("american_football")
-SOCCER_DEFAULT = espn.active_leagues("soccer")
+SOCCER_DEFAULT = football_data.active_slugs()
 
 
 def _competitions(args: argparse.Namespace) -> list[str]:

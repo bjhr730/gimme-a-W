@@ -12,6 +12,19 @@ import unicodedata
 
 # source name -> ESPN display name (only where normalization alone would fail)
 ALIASES: dict[str, str] = {
+    # football-data.org publishes formal registered names; these are the ones
+    # that do not reduce to what is already stored.
+    "pae aek": "AEK Athens",
+    "fc internazionale milano": "Internazionale",
+    "fk bodo/glimt": "Bodo/Glimt",
+    "fk bodø/glimt": "Bodo/Glimt",
+    "sk slavia praha": "Slavia Prague",
+    "deportivo alavés": "Alavés",
+    "rcd espanyol de barcelona": "Espanyol",
+    "1. fc köln": "FC Cologne",
+    "1. fc koln": "FC Cologne",
+    "az": "AZ Alkmaar",
+    "sporting clube de braga": "Braga",
     "man united": "Manchester United",
     "man city": "Manchester City",
     "nott'm forest": "Nottingham Forest",
