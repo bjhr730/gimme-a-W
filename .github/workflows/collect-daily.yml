@@ -111,6 +111,12 @@ jobs:
       - name: Soccer results and closing odds from football-data.co.uk
         if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-collect run fdcouk --league all --seasons current
+      # Keeps competition.is_active pointing at what is actually collected, so a
+      # league switched off in the source lists leaves the site too instead of
+      # showing fixtures nothing will ever resolve.
+      - name: Mark retired competitions
+        if: always() && env.FULL_PASS == 'true'
+        run: uv run gimme-collect competitions
       - name: Recompute team form and Elo ratings
         if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-collect derive --what form,elo

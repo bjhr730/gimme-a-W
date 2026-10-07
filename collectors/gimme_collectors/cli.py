@@ -144,6 +144,11 @@ def _build_parser() -> argparse.ArgumentParser:
     check.add_argument("--days", type=int, default=14, help="how far back to compare")
     check.add_argument("--strict", action="store_true", help="exit non-zero when a score disagrees")
 
+    sub.add_parser(
+        "competitions",
+        help="mark competitions active or retired to match what is actually collected",
+    )
+
     derive = sub.add_parser("derive", help="recompute derived tables from collected games")
     derive.add_argument("--what", default="form,elo", help="form | elo (comma separated)")
 
@@ -515,6 +520,45 @@ def cmd_crosscheck(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_competitions() -> int:
+    """Point competition.is_active at the lists the collectors actually read.
+
+    Switching a league off stops it being collected, but every row it already
+    has stays -- including fixtures that nothing will ever resolve, which sit on
+    the site as games that never kick off. The site reads this flag, so retiring
+    a competition here takes it out of the browsing surfaces without deleting a
+    season of history that is still true.
+
+    Derived from the source lists rather than written down a second time, and run
+    daily, so the flag cannot drift from what is collected.
+    """
+    import psycopg
+
+    from gimme_collectors.sources import football_data
+
+    cfg = settings()
+    if not cfg.database_url:
+        print("DATABASE_URL is not set.", file=sys.stderr)
+        return 2
+    active = sorted(set(espn.active_leagues()) | set(football_data.active_slugs()))
+    with psycopg.connect(cfg.database_url) as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE competition SET is_active = (slug = ANY(%s))
+            WHERE is_active IS DISTINCT FROM (slug = ANY(%s))
+            RETURNING slug, is_active
+            """,
+            (active, active),
+        )
+        changed = cur.fetchall()
+        conn.commit()
+    if changed:
+        for slug, now_active in sorted(changed):
+            print(f"  {slug:24} -> {'active' if now_active else 'retired'}")
+    print(f"competitions: {len(active)} active, {len(changed)} changed")
+    return 0
+
+
 def cmd_derive(args: argparse.Namespace) -> int:
     cfg = settings()
     if not cfg.database_url:
@@ -557,6 +601,8 @@ def _dispatch(argv: list[str] | None) -> int:
         return cmd_derive(args)
     if args.command == "crosscheck":
         return cmd_crosscheck(args)
+    if args.command == "competitions":
+        return cmd_competitions()
     if args.command == "health":
         cfg = settings()
         if not cfg.database_url:

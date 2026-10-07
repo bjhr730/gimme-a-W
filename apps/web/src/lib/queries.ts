@@ -98,7 +98,13 @@ export async function gamesForDate(
 ) {
   const filters = [eq(kickoffDay, day)];
   if (opts.competitionSlug) filters.push(eq(competition.slug, opts.competitionSlug));
-  else if (opts.sportId) filters.push(eq(competition.sportId, opts.sportId));
+  else {
+    // Retired competitions keep their history but leave the browsing surfaces:
+    // nothing collects them any more, so their fixtures would sit here for ever
+    // as games that never kick off. Asking for one by slug still works.
+    filters.push(eq(competition.isActive, true));
+    if (opts.sportId) filters.push(eq(competition.sportId, opts.sportId));
+  }
   return baseGames()
     .where(and(...filters))
     .orderBy(asc(game.kickoff), asc(competition.name));
@@ -112,7 +118,10 @@ export async function daysWithGames(
 ): Promise<Set<string>> {
   const filters = [gte(kickoffDay, from), lte(kickoffDay, to)];
   if (opts.competitionSlug) filters.push(eq(competition.slug, opts.competitionSlug));
-  else if (opts.sportId) filters.push(eq(competition.sportId, opts.sportId));
+  else {
+    filters.push(eq(competition.isActive, true));
+    if (opts.sportId) filters.push(eq(competition.sportId, opts.sportId));
+  }
   const rows = await db()
     .select({ day: kickoffDay })
     .from(game)
@@ -246,7 +255,11 @@ export async function competitionsWithSeasons(sportId?: "soccer" | "american_foo
     .from(competition)
     .leftJoin(season, eq(season.competitionId, competition.id))
     .leftJoin(game, eq(game.competitionId, competition.id))
-    .where(sportId ? eq(competition.sportId, sportId) : undefined)
+    .where(
+      sportId
+        ? and(eq(competition.sportId, sportId), eq(competition.isActive, true))
+        : eq(competition.isActive, true),
+    )
     .groupBy(competition.id)
     .orderBy(desc(sql`count(distinct ${game.id})`), asc(competition.name));
   return rows;
@@ -570,7 +583,7 @@ export async function parlayLegs(day: string, limit = 20): Promise<ParlayLeg[]> 
       from prediction p
       join latest_runs lr on lr.id = p.model_run_id
       join game g on g.id = p.game_id
-      join competition c on c.id = g.competition_id
+      join competition c on c.id = g.competition_id and c.is_active
       join team h on h.id = g.home_team_id
       join team a on a.id = g.away_team_id
       left join player pl on p.subject_type = 'player' and pl.id = p.subject_id
