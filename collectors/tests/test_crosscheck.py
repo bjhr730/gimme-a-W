@@ -146,7 +146,8 @@ def test_the_window_follows_the_source_not_the_clock():
 
 def test_the_window_of_nothing_is_nothing():
     assert crosscheck.window([], 14) is None
-    assert crosscheck.window([record("Arsenal", "Chelsea", None, None, status="scheduled")], 14) is None
+    unplayed = [record("Arsenal", "Chelsea", None, None, status="scheduled")]
+    assert crosscheck.window(unplayed, 14) is None
 
 
 def test_several_findings_are_all_collected():

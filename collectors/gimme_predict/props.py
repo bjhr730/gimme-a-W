@@ -44,6 +44,21 @@ class PropsOutput:
         return len(self.football) + len(self.team_counts) + len(self.scorers)
 
 
+# Props are published for the players anyone would look up, not for the whole
+# squad. Graded over 30 days, a quarter of all published player props were for
+# players who never took the field -- mostly the tail of defenders and
+# substitutes the model rated at a few per cent and listed anyway. Keeping the
+# most involved few per side drops that tail, roughly halves the rows written and
+# read, and loses nothing a reader wanted.
+PROPS_PER_TEAM = 5
+
+
+def top_by_involvement(squad: list[Any]) -> list[Any]:
+    """The most involved players on one team, by expected goals plus shots."""
+    ranked = sorted(squad, key=lambda p: p.expected_goals + p.expected_sot, reverse=True)
+    return ranked[:PROPS_PER_TEAM]
+
+
 # ------------------------------------------------------------ football
 
 
@@ -273,18 +288,17 @@ def predict_soccer(
             lam, mu = xg.get(g.id, (1.4, 1.1))
             for team_id, team_xg in ((g.home_id, lam), (g.away_id, mu)):
                 window = min(len(team_games.get(team_id, [])), Rolling().n)
-                out.scorers.extend(
-                    soccer_props.predict_players(
-                        g,
-                        team_id=team_id,
-                        team_xg=team_xg,
-                        team_sot=team_sot.get((g.id, team_id)),
-                        roster=rosters.get(team_id, []),
-                        threat=threat,
-                        team_games_window=window,
-                        play_probability=play_probability,
-                    )
+                squad = soccer_props.predict_players(
+                    g,
+                    team_id=team_id,
+                    team_xg=team_xg,
+                    team_sot=team_sot.get((g.id, team_id)),
+                    roster=rosters.get(team_id, []),
+                    threat=threat,
+                    team_games_window=window,
+                    play_probability=play_probability,
                 )
+                out.scorers.extend(top_by_involvement(squad))
     return out if out.count() else None
 
 

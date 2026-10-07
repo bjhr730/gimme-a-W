@@ -18,29 +18,15 @@ import psycopg
 
 from gimme_collectors import quota
 from gimme_collectors.config import settings
+from gimme_collectors.sources import espn
 from gimme_predict import data, evaluate, players, props
 from gimme_predict.features import build_features
 from gimme_predict.markets import football, football_players, soccer, soccer_props
 
-SOCCER_DEFAULT = [
-    "eng.1",
-    "eng.2",
-    "esp.1",
-    "ita.1",
-    "ger.1",
-    "fra.1",
-    "ned.1",
-    "por.1",
-    "usa.1",
-    "mex.1",
-    "arg.1",
-    "bra.1",
-    "uefa.champions",
-    "uefa.europa",
-    "uefa.europa.conf",
-    "conmebol.libertadores",
-]
-FOOTBALL_DEFAULT = ["nfl", "college-football"]
+# One list, in espn.py. The predictor used to keep its own copy, which is how a
+# competition gets collected and never predicted, or the reverse.
+FOOTBALL_DEFAULT = espn.active_leagues("american_football")
+SOCCER_DEFAULT = espn.active_leagues("soccer")
 
 
 def _competitions(args: argparse.Namespace) -> list[str]:

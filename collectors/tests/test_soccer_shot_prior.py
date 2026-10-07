@@ -209,3 +209,40 @@ def test_a_one_sided_game_is_dropped_rather_than_read_as_a_shut_out():
 
 def test_shots_by_game_handles_nothing():
     assert shots_by_game([]) == {}
+
+
+# ------------------------------------------------------- publishing fewer props
+
+
+class _Prop:
+    """Just the fields the cap ranks on."""
+
+    def __init__(self, name, goals, sot):
+        self.name, self.expected_goals, self.expected_sot = name, goals, sot
+
+
+def test_only_the_most_involved_players_are_published():
+    from gimme_predict.props import PROPS_PER_TEAM, top_by_involvement
+
+    squad = [_Prop(f"p{i}", goals=i * 0.05, sot=i * 0.1) for i in range(14)]
+    kept = top_by_involvement(squad)
+    assert len(kept) == PROPS_PER_TEAM
+    # the most involved survive, in order
+    assert [p.name for p in kept] == ["p13", "p12", "p11", "p10", "p9"]
+
+
+def test_a_short_squad_is_kept_whole():
+    from gimme_predict.props import top_by_involvement
+
+    squad = [_Prop("a", 0.3, 0.9), _Prop("b", 0.1, 0.4)]
+    assert len(top_by_involvement(squad)) == 2
+    assert top_by_involvement([]) == []
+
+
+def test_shots_count_toward_involvement_not_just_goals():
+    from gimme_predict.props import top_by_involvement
+
+    # a winger who shoots often but converts rarely outranks a striker who does neither
+    shooter = _Prop("shooter", goals=0.08, sot=1.4)
+    quiet = _Prop("quiet", goals=0.10, sot=0.1)
+    assert top_by_involvement([quiet, shooter])[0].name == "shooter"

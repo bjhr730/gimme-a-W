@@ -56,6 +56,11 @@ class League:
     scoreboard_params: dict[str, str] = field(default_factory=dict)
     teams_params: dict[str, str] = field(default_factory=dict)
     standings_params: dict[str, str] = field(default_factory=dict)
+    # Collected by `--league all`. A league switched off here stays in the
+    # catalogue and still works if asked for by name -- it just stops costing a
+    # request every day. Narrowing this list is the single lever on how much the
+    # pipeline reads, writes and predicts.
+    active: bool = True
     # ESPN uid prefix for entities in this league: "s:20~l:28" (NFL), "s:600" (soccer).
     # Used to rebuild a uid when a payload only carries the numeric id.
     uid_prefix: str = "s:600"
@@ -71,9 +76,17 @@ class League:
         )
 
 
-def _soccer(slug: str, name: str, country: str | None, level: str = "club") -> League:
+def _soccer(
+    slug: str, name: str, country: str | None, level: str = "club", *, active: bool = True
+) -> League:
     return League(
-        slug=slug, espn_sport="soccer", name=name, sport="soccer", country=country, level=level
+        slug=slug,
+        espn_sport="soccer",
+        name=name,
+        sport="soccer",
+        country=country,
+        level=level,
+        active=active,
     )
 
 
@@ -104,26 +117,35 @@ LEAGUES: dict[str, League] = {
             uid_prefix="s:20~l:23",
         ),
         _soccer("eng.1", "English Premier League", "England"),
-        _soccer("eng.2", "English Championship", "England"),
+        _soccer("eng.2", "English Championship", "England", active=False),
         _soccer("esp.1", "Spanish LALIGA", "Spain"),
         _soccer("ita.1", "Italian Serie A", "Italy"),
         _soccer("ger.1", "German Bundesliga", "Germany"),
         _soccer("fra.1", "French Ligue 1", "France"),
-        _soccer("ned.1", "Dutch Eredivisie", "Netherlands"),
-        _soccer("por.1", "Portuguese Primeira Liga", "Portugal"),
+        _soccer("ned.1", "Dutch Eredivisie", "Netherlands", active=False),
+        _soccer("por.1", "Portuguese Primeira Liga", "Portugal", active=False),
         _soccer("usa.1", "MLS", "USA"),
-        _soccer("mex.1", "Liga MX", "Mexico"),
-        _soccer("arg.1", "Argentine Liga Profesional", "Argentina"),
-        _soccer("bra.1", "Brazilian Serie A", "Brazil"),
+        _soccer("mex.1", "Liga MX", "Mexico", active=False),
+        _soccer("arg.1", "Argentine Liga Profesional", "Argentina", active=False),
+        _soccer("bra.1", "Brazilian Serie A", "Brazil", active=False),
         _soccer("uefa.champions", "UEFA Champions League", None),
-        _soccer("uefa.europa", "UEFA Europa League", None),
-        _soccer("uefa.europa.conf", "UEFA Conference League", None),
-        _soccer("conmebol.libertadores", "Copa Libertadores", None),
-        _soccer("fifa.world", "FIFA World Cup", None, level="international"),
-        _soccer("uefa.euro", "UEFA European Championship", None, level="international"),
-        _soccer("conmebol.america", "Copa America", None, level="international"),
+        _soccer("uefa.europa", "UEFA Europa League", None, active=False),
+        _soccer("uefa.europa.conf", "UEFA Conference League", None, active=False),
+        _soccer("conmebol.libertadores", "Copa Libertadores", None, active=False),
+        _soccer("fifa.world", "FIFA World Cup", None, level="international", active=False),
+        _soccer(
+            "uefa.euro", "UEFA European Championship", None, level="international", active=False
+        ),
+        _soccer("conmebol.america", "Copa America", None, level="international", active=False),
     ]
 }
+
+
+def active_leagues(sport: str | None = None) -> list[str]:
+    """Slugs collected by `--league all`, and the one list the predictor reads too."""
+    return sorted(
+        slug for slug, lg in LEAGUES.items() if lg.active and (sport is None or lg.sport == sport)
+    )
 
 
 def league(slug: str) -> League:

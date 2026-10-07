@@ -169,7 +169,8 @@ def _summary(label: str, result: CollectResult) -> str:
 def cmd_leagues() -> int:
     for slug, lg in sorted(espn.LEAGUES.items()):
         fd = fdcouk.DIVISIONS.get(slug, "")
-        print(f"{slug:24} {lg.sport:18} {lg.name:34} {'history: ' + fd if fd else ''}")
+        state = "on " if lg.active else "off"
+        print(f"{slug:24} {state}  {lg.sport:18} {lg.name:34} {'history: ' + fd if fd else ''}")
     print("\nAny other ESPN soccer slug (e.g. tur.1, sco.1) also works.")
     return 0
 
@@ -185,7 +186,7 @@ def _espn_units(args: argparse.Namespace, fetcher: Fetcher) -> Iterator[tuple[st
     days = [start + timedelta(days=i) for i in range(max(args.days, 1))]
     slugs = args.league or ["nfl", "college-football", "eng.1"]
     if "all" in slugs:
-        slugs = sorted(espn.LEAGUES)
+        slugs = espn.active_leagues()
     adapter = espn.EspnAdapter(fetcher)
     for slug in slugs:
         yield slug, adapter.collect(espn.league(slug), kinds=kinds, days=days)
