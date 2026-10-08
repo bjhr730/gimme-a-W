@@ -216,14 +216,24 @@ def _nflverse_units(
         "injuries",
     }
     seasons = _parse_seasons(args.seasons)
-    games_csv, _ = fetcher.get(nflverse.GAMES_URL), None
-    text = games_csv.body
+
+    # Fetched only when something needs it. The injury report does not, and
+    # pulling it anyway meant a transient 404 on the schedules asset -- nflverse
+    # rebuilds it daily and it vanishes while it uploads -- took the injuries
+    # down with it.
+    cached: dict[str, str] = {}
+
+    def games_text() -> str:
+        if "body" not in cached:
+            cached["body"] = fetcher.get(nflverse.GAMES_URL).body
+        return cached["body"]
+
     if "games" in what:
         result = CollectResult(fetched_urls=[nflverse.GAMES_URL])
-        result.games = nflverse.parse_games(text, seasons)
+        result.games = nflverse.parse_games(games_text(), seasons)
         yield f"nflverse games {seasons[0]}-{seasons[-1]}", result
     if "players" in what:
-        ids = nflverse.game_id_map(text, seasons)
+        ids = nflverse.game_id_map(games_text(), seasons)
         for season in seasons:
             url = nflverse.player_stats_url(season)
             try:

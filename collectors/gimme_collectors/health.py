@@ -23,19 +23,27 @@ def check(database_url: str) -> tuple[list[str], list[str]]:
     notes: list[str] = []
     now = datetime.now(UTC)
     with psycopg.connect(database_url, row_factory=dict_row) as conn, conn.cursor() as cur:
+        # A source that failed and has since succeeded is not a problem, it is a
+        # blip: nflverse rebuilds its release assets daily and the file 404s for
+        # the minute it is being uploaded. Reporting that for a full day fails
+        # every run in between and mails about something already fixed. What
+        # matters is a source that failed and has not worked since.
         cur.execute(
             """
-            SELECT s.slug, r.adapter, r.started_at, r.error
+            SELECT DISTINCT ON (r.source_id, r.adapter)
+                   s.slug, r.adapter, r.started_at, r.error, r.status
             FROM collector_run r JOIN source s ON s.id = r.source_id
-            WHERE r.status = 'failed' AND r.started_at >= %s
-            ORDER BY r.started_at DESC
+            WHERE r.started_at >= %s
+            ORDER BY r.source_id, r.adapter, r.started_at DESC
             """,
             (now - timedelta(hours=24),),
         )
         for r in cur.fetchall():
+            if r["status"] != "failed":
+                continue  # its latest attempt worked, whatever happened before
             first_line = (r["error"] or "").strip().splitlines()[:1]
             problems.append(
-                f"collector run failed: {r['slug']}/{r['adapter']} at "
+                f"collector still failing: {r['slug']}/{r['adapter']} since "
                 f"{r['started_at']:%Y-%m-%d %H:%M} UTC: {first_line[0] if first_line else ''}"
             )
 
