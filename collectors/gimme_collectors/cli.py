@@ -1,11 +1,11 @@
 """Command line entry point.
 
 gimme-collect leagues
-gimme-collect run espn --kind all --league nfl --league eng.1 --date today --days 2
-gimme-collect run espn --kind roster --league nfl
+gimme-collect run football-data --league all --kind all --seasons current
 gimme-collect run nflverse --seasons 2015-2026 --what games,players
 gimme-collect run fdcouk --league eng.1 --league esp.1 --seasons 2015-2025
-gimme-collect derive --what form,elo
+gimme-collect derive --what form,elo,standings
+gimme-collect crosscheck --league all --days 14
 """
 
 from __future__ import annotations
@@ -23,19 +23,13 @@ from gimme_collectors import quota
 from gimme_collectors.config import settings
 from gimme_collectors.models import CollectResult
 from gimme_collectors.pipeline.fetch import Fetcher
-from gimme_collectors.sources import espn, fdcouk, football_data, nflverse
+from gimme_collectors.sources import fdcouk, football_data, nflverse
 
 KINDS = {"scoreboard", "teams", "standings", "summary", "roster", "injuries"}
 DAILY_KINDS = {"scoreboard", "teams", "standings", "summary", "injuries"}  # `all`; rosters weekly
-DERIVATIONS = {"form", "elo"}
+DERIVATIONS = {"form", "elo", "standings"}
 
 SOURCES: dict[str, dict[str, Any]] = {
-    "espn": {
-        "slug": espn.SOURCE_SLUG,
-        "name": espn.SOURCE_NAME,
-        "base_url": espn.BASE_URL,
-        "rate": espn.RATE_LIMIT_PER_MIN,
-    },
     "nflverse": {
         "slug": nflverse.SOURCE_SLUG,
         "name": nflverse.SOURCE_NAME,
@@ -98,9 +92,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--kind",
         default="all",
-        help="espn: all | scoreboard | teams | standings | summary | injuries | roster "
-        "(comma separated). "
-        "'all' is everything except roster.",
+        help="football-data: scoreboard | standings | all (comma separated)",
     )
     run.add_argument(
         "--what",
@@ -152,7 +144,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     derive = sub.add_parser("derive", help="recompute derived tables from collected games")
-    derive.add_argument("--what", default="form,elo", help="form | elo (comma separated)")
+    derive.add_argument(
+        "--what", default="form,elo,standings", help="form | elo | standings (comma separated)"
+    )
 
     sub.add_parser("health", help="exit 1 when the pipeline is stale or a run failed")
     return parser
@@ -175,29 +169,17 @@ def _summary(label: str, result: CollectResult) -> str:
 
 
 def cmd_leagues() -> int:
-    for slug, lg in sorted(espn.LEAGUES.items()):
-        fd = fdcouk.DIVISIONS.get(slug, "")
-        state = "on " if lg.active else "off"
-        print(f"{slug:24} {state}  {lg.sport:18} {lg.name:34} {'history: ' + fd if fd else ''}")
-    print("\nAny other ESPN soccer slug (e.g. tur.1, sco.1) also works.")
+    nfl = set(nflverse.active_slugs())
+    for slug in sorted(nfl | set(football_data.active_slugs())):
+        source = "nflverse" if slug in nfl else "football-data.org"
+        second = "+ football-data.co.uk" if slug in fdcouk.DIVISIONS else ""
+        print(f"{slug:20} {source:18} {second}")
     return 0
 
 
 # ---------------------------------------------------------------- units
 # Each source yields (label, CollectResult) units so the CLI can write and report
 # them one at a time and keep going when one fails.
-
-
-def _espn_units(args: argparse.Namespace, fetcher: Fetcher) -> Iterator[tuple[str, CollectResult]]:
-    kinds = _kinds(args.kind)
-    start = _parse_date(args.date)
-    days = [start + timedelta(days=i) for i in range(max(args.days, 1))]
-    slugs = args.league or ["nfl", "college-football", "eng.1"]
-    if "all" in slugs:
-        slugs = espn.active_leagues()
-    adapter = espn.EspnAdapter(fetcher)
-    for slug in slugs:
-        yield slug, adapter.collect(espn.league(slug), kinds=kinds, days=days)
 
 
 def _nflverse_units(
@@ -207,6 +189,7 @@ def _nflverse_units(
         "games",
         "players",
         "injuries",
+        "teams",
     }
     seasons = _parse_seasons(args.seasons)
 
@@ -237,6 +220,18 @@ def _nflverse_units(
             result = CollectResult(fetched_urls=[url])
             result.summaries = nflverse.parse_player_stats(fetched.body, ids)
             yield f"nflverse players {season}", result
+    if "teams" in what:
+        # carries each club's division, which the NFL table is grouped by and
+        # which no result can tell you
+        try:
+            fetched = fetcher.get(nflverse.TEAMS_URL)
+        except Exception as exc:
+            print(f"[nflverse teams] skipped: {exc}")
+        else:
+            result = CollectResult(fetched_urls=[nflverse.TEAMS_URL])
+            result.teams = nflverse.parse_teams(fetched.body, seasons[-1])
+            if result.teams:
+                yield f"nflverse teams {seasons[-1]}", result
     if "injuries" in what:
         # The official weekly report, with practice participation -- which the ESPN
         # injuries page does not carry. Only the current season is meaningful.
@@ -319,7 +314,6 @@ def _football_data_units(
 
 
 UNITS = {
-    "espn": _espn_units,
     "nflverse": _nflverse_units,
     "fdcouk": _fdcouk_units,
     "football-data": _football_data_units,
@@ -513,7 +507,7 @@ def cmd_competitions() -> int:
     if not cfg.database_url:
         print("DATABASE_URL is not set.", file=sys.stderr)
         return 2
-    active = sorted(set(espn.active_leagues()) | set(football_data.active_slugs()))
+    active = sorted(set(nflverse.active_slugs()) | set(football_data.active_slugs()))
     with psycopg.connect(cfg.database_url) as conn, conn.cursor() as cur:
         cur.execute(
             """

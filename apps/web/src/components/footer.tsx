@@ -6,7 +6,6 @@ const SOURCES = [
     covers: "soccer shots, corners, closing odds",
   },
   { name: "nflverse", href: "https://github.com/nflverse/nflverse-data", covers: "NFL" },
-  { name: "ESPN", href: "https://www.espn.com", covers: "NFL scores" },
 ];
 
 /**

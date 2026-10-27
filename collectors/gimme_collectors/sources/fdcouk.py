@@ -28,7 +28,7 @@ from gimme_collectors.models import (
     SeasonRef,
     TeamRef,
 )
-from gimme_collectors.sources.espn import LEAGUES
+from gimme_collectors.sources.football_data import COMPETITIONS
 
 SOURCE_SLUG = "football-data.co.uk"
 SOURCE_NAME = "football-data.co.uk"
@@ -68,9 +68,15 @@ def csv_url(slug: str, start_year: int) -> str:
 
 
 def competition_for(slug: str) -> CompetitionRef:
-    lg = LEAGUES.get(slug)
-    if lg is not None:
-        return lg.competition()
+    """Name and country come from football-data.org where it covers the league.
+
+    This source reaches a few leagues that one does not -- Belgium, Greece,
+    Scotland, Turkey -- and those get a bare reference, which is all the writer
+    needs to find or create the competition."""
+    known = COMPETITIONS.get(slug)
+    if known is not None:
+        _code, name, country = known
+        return CompetitionRef(slug=slug, name=name, sport="soccer", country=country, level="club")
     return CompetitionRef(slug=slug, name=slug, sport="soccer")
 
 

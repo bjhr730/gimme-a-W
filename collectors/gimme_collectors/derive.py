@@ -1,4 +1,4 @@
-"""Derived tables computed from our own `game` rows: team form and Elo ratings.
+"""Derived tables computed from our own `game` rows: form, Elo and NFL standings.
 
 Run after collecting:  gimme-collect derive --what form,elo
 Both are idempotent (upsert on natural keys) and cheap: a few thousand games.
@@ -207,6 +207,101 @@ def compute_elo(conn: psycopg.Connection[Any], *, as_of: date | None = None) -> 
     return written
 
 
+# --------------------------------------------------------------- standings
+
+# Soccer tables come from football-data.org, which knows each competition's
+# tiebreakers. Nothing publishes an NFL table for free, and ESPN was the only
+# thing supplying one -- so it is computed from the results instead. Ties count
+# half a win, which is how the NFL orders a conference; division and conference
+# tiebreakers beyond that are not modelled, so a rank here is a sort by record,
+# not an official seeding.
+STANDINGS_FROM_RESULTS = ("nfl",)
+
+TABLE_SQL = """
+WITH sides AS (
+    SELECT g.season_id, g.home_team_id AS team_id, g.home_score AS scored,
+           g.away_score AS conceded
+    FROM game g JOIN competition c ON c.id = g.competition_id
+    WHERE c.slug = ANY(%s) AND g.status = 'final'
+      AND g.home_score IS NOT NULL AND g.away_score IS NOT NULL
+    UNION ALL
+    SELECT g.season_id, g.away_team_id, g.away_score, g.home_score
+    FROM game g JOIN competition c ON c.id = g.competition_id
+    WHERE c.slug = ANY(%s) AND g.status = 'final'
+      AND g.home_score IS NOT NULL AND g.away_score IS NOT NULL
+)
+SELECT s.season_id, s.team_id,
+       COALESCE(ts.group_name, '') AS group_name,
+       count(*) AS played,
+       count(*) FILTER (WHERE scored > conceded) AS wins,
+       count(*) FILTER (WHERE scored = conceded) AS draws,
+       count(*) FILTER (WHERE scored < conceded) AS losses,
+       sum(scored) AS points_for,
+       sum(conceded) AS points_against
+FROM sides s
+LEFT JOIN team_season ts ON ts.season_id = s.season_id AND ts.team_id = s.team_id
+GROUP BY s.season_id, s.team_id, COALESCE(ts.group_name, '')
+"""
+
+
+def compute_standings(conn: psycopg.Connection[Any], *, as_of: date | None = None) -> int:
+    """League tables for competitions no source publishes one for."""
+    as_of = as_of or datetime.now(UTC).date()
+    slugs = list(STANDINGS_FROM_RESULTS)
+    with conn.cursor() as cur:
+        cur.execute(TABLE_SQL, (slugs, slugs))
+        rows = cur.fetchall()
+    if not rows:
+        return 0
+
+    # One table per (season, division): the NFL's standings are read by
+    # division, and ranking all 32 together would be a list nobody uses.
+    by_group: dict[tuple[int, str], list[tuple[Any, ...]]] = defaultdict(list)
+    for row in rows:
+        by_group[(int(row[0]), str(row[2]))].append(row)
+
+    written = 0
+    with conn.cursor() as cur:
+        for (season_id, group_name), teams in by_group.items():
+            # win percentage, ties worth half; point differential breaks a level record
+            def order(r: tuple[Any, ...]) -> tuple[float, int]:
+                played = int(r[3]) or 1
+                pct = (int(r[4]) + 0.5 * int(r[5])) / played
+                return (-pct, -(int(r[7]) - int(r[8])))
+
+            for rank, r in enumerate(sorted(teams, key=order), start=1):
+                cur.execute(
+                    """
+                    INSERT INTO standing (season_id, team_id, as_of, group_name, rank, played,
+                                          wins, draws, losses, points, points_for, points_against)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (season_id, team_id, as_of, group_name) DO UPDATE SET
+                        rank = EXCLUDED.rank, played = EXCLUDED.played, wins = EXCLUDED.wins,
+                        draws = EXCLUDED.draws, losses = EXCLUDED.losses,
+                        points = EXCLUDED.points, points_for = EXCLUDED.points_for,
+                        points_against = EXCLUDED.points_against
+                    """,
+                    (
+                        season_id,
+                        int(r[1]),  # team
+                        as_of,
+                        group_name,
+                        rank,
+                        int(r[3]),  # played
+                        int(r[4]),  # wins
+                        int(r[5]),  # draws
+                        int(r[6]),  # losses
+                        # a win is two points, a tie one -- the NFL's own convention
+                        2 * int(r[4]) + int(r[5]),
+                        int(r[7]),  # points for
+                        int(r[8]),  # points against
+                    ),
+                )
+                written += 1
+    conn.commit()
+    return written
+
+
 def run(database_url: str, what: set[str]) -> dict[str, int]:
     out: dict[str, int] = {}
     with psycopg.connect(database_url) as conn:
@@ -214,4 +309,6 @@ def run(database_url: str, what: set[str]) -> dict[str, int]:
             out["form"] = compute_form(conn)
         if "elo" in what:
             out["elo"] = compute_elo(conn)
+        if "standings" in what:
+            out["standings"] = compute_standings(conn)
     return out

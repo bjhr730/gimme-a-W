@@ -18,14 +18,14 @@ import psycopg
 
 from gimme_collectors import quota
 from gimme_collectors.config import settings
-from gimme_collectors.sources import espn, football_data
+from gimme_collectors.sources import football_data, nflverse
 from gimme_predict import data, evaluate, players, props
 from gimme_predict.features import build_features
 from gimme_predict.markets import football, football_players, soccer, soccer_props
 
 # Each sport's list lives with the source that collects it, so a competition
 # cannot be collected and never predicted, or the reverse.
-FOOTBALL_DEFAULT = espn.active_leagues("american_football")
+FOOTBALL_DEFAULT = nflverse.active_slugs()
 SOCCER_DEFAULT = football_data.active_slugs()
 
 

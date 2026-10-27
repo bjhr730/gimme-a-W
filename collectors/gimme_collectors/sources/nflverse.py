@@ -27,6 +27,7 @@ from gimme_collectors.models import (
     PlayerStatusRecord,
     SeasonRef,
     SummaryRecord,
+    TeamRecord,
     TeamRef,
     VenueRef,
 )
@@ -341,6 +342,49 @@ def game_id_map(csv_text: str, seasons: Iterable[int] | None = None) -> dict[str
         if season_year is None or (wanted is not None and season_year not in wanted):
             continue
         out[str(row["game_id"])] = game_external_id(row)
+    return out
+
+
+def active_slugs() -> list[str]:
+    """The competitions this source collects. nflverse carries the NFL's games,
+    closing lines, player weeks, injuries and divisions, which is everything the
+    app needs -- ESPN used to supply the rest and no longer does."""
+    return ["nfl"]
+
+
+# --------------------------------------------------------------- divisions
+
+TEAMS_URL = f"{BASE_URL}/releases/download/teams/teams_colors_logos.csv"
+
+
+def parse_teams(csv_text: str, season: int) -> list[TeamRecord]:
+    """Team-season rows carrying the division.
+
+    The NFL's table is read by division, and the division is the one thing about
+    a club that no result can tell you. ESPN used to supply it; this is where it
+    comes from now.
+    """
+    ref = SeasonRef(label=str(season), year=season)
+    out: list[TeamRecord] = []
+    for row in csv.DictReader(io.StringIO(csv_text)):
+        abbr = str(row.get("team_abbr") or "").strip()
+        division = str(row.get("team_division") or "").strip()
+        team = team_ref(abbr)
+        if team is None or not division:
+            continue  # historical abbreviations (OAK, SD, STL) map to nothing current
+        out.append(TeamRecord(competition=COMPETITION, season=ref, team=team, group_name=division))
+    return out
+
+
+def parse_divisions(csv_text: str) -> dict[str, str]:
+    """nflverse abbreviation -> "AFC North". The NFL's table is read by division,
+    and nothing else free publishes which division a club is in."""
+    out: dict[str, str] = {}
+    for row in csv.DictReader(io.StringIO(csv_text)):
+        abbr = str(row.get("team_abbr") or "").strip()
+        division = str(row.get("team_division") or "").strip()
+        if abbr and division:
+            out[abbr] = division
     return out
 
 

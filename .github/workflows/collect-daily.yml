@@ -49,13 +49,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen --no-dev
-      - name: NFL from ESPN (scores, teams, standings, injuries)
-        run: |
-          uv run gimme-collect run espn \
-            --kind all \
-            --league "${{ github.event.inputs.league || 'all' }}" \
-            --date "${{ github.event.inputs.date || 'yesterday' }}" \
-            --days "${{ github.event.inputs.days || '3' }}"
       # Soccer, from a documented API under a licence. One request per
       # competition returns the whole season -- every fixture and every result --
       # so nine competitions cost nine calls for matches and nine for tables,
@@ -69,26 +62,16 @@ jobs:
       - name: Soccer tables from football-data.org
         if: always() && env.FULL_PASS == 'true' && env.FOOTBALL_DATA_API_KEY != ''
         run: uv run gimme-collect run football-data --league all --kind standings --seasons current
-      - name: NFL fixtures for the next ten days
-        if: always()
-        run: uv run gimme-collect run espn --kind scoreboard --league all --date today --days 10
-      # A missed or failed run used to leave a hole in the season that nothing
-      # filled in later. Re-reading the last three weeks closes any gap. Once a
-      # day is enough. Since ESPN dropped range requests, football is fetched a
-      # day at a time and soccer a month at a time -- so three weeks of soccer is
-      # one or two requests per league, not twenty-two.
-      - name: Re-read the NFL's last three weeks so a missed run cannot leave a gap
+      # The whole NFL, from the open dataset: the schedule and results with
+      # closing lines, weekly player stats, the league's own injury report with
+      # practice participation, and each club's division. ESPN used to supply the
+      # scores and the table; nothing here needs it now.
+      #
+      # The injury report moves Wednesday to Friday, so the Tuesday pass is stale
+      # by kickoff -- it runs daily, and it is a handful of small CSVs.
+      - name: NFL from nflverse (games, lines, player weeks, injuries, divisions)
         if: always() && env.FULL_PASS == 'true'
-        run: >-
-          uv run gimme-collect run espn --kind scoreboard --league all
-          --date "$(date -u -d '21 days ago' +%F)" --days 22
-      # The NFL injury report moves Wednesday to Friday, so the Tuesday nflverse
-      # run is stale by kickoff. This is the league's own report -- designation
-      # plus practice participation, which the ESPN injuries page does not carry --
-      # and it is one small CSV, so it can run with the rest.
-      - name: NFL injury report from nflverse
-        if: always() && env.FULL_PASS == 'true'
-        run: uv run gimme-collect run nflverse --seasons current --what injuries
+        run: uv run gimme-collect run nflverse --seasons current
       # The second witness. football-data.co.uk publishes the same results as
       # static CSVs from an unrelated operation, and it is also where shots,
       # corners and closing odds come from now that ESPN is gone.
@@ -108,9 +91,11 @@ jobs:
       - name: Mark retired competitions
         if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-collect competitions
-      - name: Recompute team form and Elo ratings
+      # Standings too: nothing publishes a free NFL table, so it is computed
+      # from the results, grouped by the divisions nflverse supplies.
+      - name: Recompute team form, Elo ratings and the NFL table
         if: always() && env.FULL_PASS == 'true'
-        run: uv run gimme-collect derive --what form,elo
+        run: uv run gimme-collect derive --what form,elo,standings
       - name: Predict games in the coming eight days
         if: always() && env.FULL_PASS == 'true'
         run: uv run gimme-predict run --days 8

@@ -84,9 +84,8 @@ advice, and none of it is affiliated with any league, club or provider.
 
 | Source | Covers | Key | Free tier | Feeds which predictions |
 |---|---|---|---|---|
-| [nflverse](https://github.com/nflverse/nflverse-data) | NFL play-by-play, targets, carries, snap counts, rosters, injuries (CSV/parquet) | No | Unlimited (static files) | Win probability, anytime TD, passing/rushing/receiving yards |
+| [nflverse](https://github.com/nflverse/nflverse-data) | **The whole NFL**: schedule and results with closing lines, weekly player stats, the league injury report, team divisions | No | Unlimited (static files) | Win probability, anytime TD, passing/rushing/receiving yards, the NFL table |
 | [football-data.co.uk](https://www.football-data.co.uk/data.php) | Historical CSVs since 1993 for 22+ leagues: results, **shots on target, corners**, closing odds | No | Unlimited (static files) | Back-testing of 1X2, totals, corners and shots models |
-| [ESPN](https://www.espn.com) | NFL scores, teams, standings, injuries | No | Undocumented | The NFL only — soccer moved off it in Oct 2026, college football was dropped |
 | [football-data.org](https://www.football-data.org) | **All soccer fixtures, results and tables** — one request per competition returns a whole season | Yes (free) | 10 req/min | Every soccer market |
 | [The Odds API](https://the-odds-api.com) | Bookmaker lines for all three sports | Yes | 500 req/month | Market baseline every model is measured against |
 

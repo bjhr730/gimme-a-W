@@ -1,4 +1,4 @@
-name: Collect weekly (rosters and history)
+name: Collect weekly (history)
 
 on:
   schedule:
@@ -36,10 +36,6 @@ jobs:
           python-version: "3.12"
       - run: uv sync --frozen --no-dev
       # ESPN is American football only now, so this is two competitions.
-      - name: Rosters for every team (ESPN)
-        run: |
-          uv run gimme-collect run espn --kind roster \
-            --league "${{ github.event.inputs.league || 'all' }}"
       - name: Current NFL season from nflverse (games, closing lines, player weeks)
         if: always()
         run: uv run gimme-collect run nflverse --seasons current --what games,players
