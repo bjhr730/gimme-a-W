@@ -31,7 +31,7 @@ jobs:
       COLLECTOR_USER_AGENT: ${{ vars.COLLECTOR_USER_AGENT }}
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: "3.12"
       - run: uv sync --frozen --no-dev
