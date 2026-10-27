@@ -34,10 +34,14 @@ export function NavLinks({ variant }: { variant: "top" | "bottom" }) {
     );
   }
 
+  // Flex rather than a fixed column count: this was `grid-cols-6` and went
+  // lopsided the moment a tab was removed, leaving an empty sixth column and
+  // every tab shoved left. Equal flex children divide the bar by however many
+  // links there are, so adding or dropping one stays centred.
   return (
-    <ul className="grid grid-cols-6">
+    <ul className="flex">
       {LINKS.map((l) => (
-        <li key={l.href}>
+        <li key={l.href} className="flex-1">
           <Link
             href={l.href}
             aria-current={active(l.href) ? "page" : undefined}
