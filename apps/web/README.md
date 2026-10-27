@@ -8,7 +8,7 @@ phones, top nav from 768px. Installable as a PWA.
 | Route | What |
 |---|---|
 | `/` | Today's games across all sports, with a date strip |
-| `/soccer`, `/nfl`, `/cfb` | Same, scoped to one sport, plus links to every table |
+| `/soccer`, `/nfl` | Same, scoped to one sport, plus links to every table |
 | `/games/[id]` | Score, status, venue, weather, box-score stats, latest bookmaker lines |
 | `/teams/[id]` | Elo, last-5 form, table positions, upcoming games, recent results, roster |
 | `/players/[id]` | Player card and game log (passing/rushing/receiving or goals/shots per game) |

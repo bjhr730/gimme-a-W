@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Gimme a W",
     short_name: "Gimme a W",
-    description: "Scores, standings, stats and predictions for soccer, the NFL and college football.",
+    description: "Scores, standings, stats and predictions for soccer and the NFL.",
     start_url: "/",
     display: "standalone",
     background_color: "#dde0e4",

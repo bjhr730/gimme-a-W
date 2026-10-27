@@ -22,7 +22,7 @@ const body = Source_Sans_3({
 
 export const metadata: Metadata = {
   title: { default: "Gimme a W", template: "%s · Gimme a W" },
-  description: "Scores, standings, stats and predictions for soccer, the NFL and college football.",
+  description: "Scores, standings, stats and predictions for soccer and the NFL.",
   applicationName: "Gimme a W",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Gimme a W" },
