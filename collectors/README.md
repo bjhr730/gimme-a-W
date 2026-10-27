@@ -2,7 +2,7 @@
 
 Python package with two parts:
 
-- `gimme_collectors`: source adapters (ESPN today; Sports-Reference, CFBD, nflverse and
+- `gimme_collectors`: source adapters (ESPN, football-data.org, football-data.co.uk, nflverse and
   football-data.co.uk next), a throttled fetcher with an on-disk cache, and the Postgres writer.
 - `gimme_predict`: the prediction engine (phase 4 onward).
 

@@ -67,7 +67,7 @@ class Fetcher:
             headers={
                 "User-Agent": user_agent,
                 "Accept": "application/json, text/html;q=0.5",
-                # keyed sources (CFBD) authenticate with a header, not a query param,
+                # keyed sources (football-data.org) authenticate with a header,
                 # so it must never reach the cache filename or the raw-page sink
                 **(extra_headers or {}),
             },

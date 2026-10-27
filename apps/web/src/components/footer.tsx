@@ -6,18 +6,13 @@ const SOURCES = [
     covers: "soccer shots, corners, closing odds",
   },
   { name: "nflverse", href: "https://github.com/nflverse/nflverse-data", covers: "NFL" },
-  {
-    name: "CollegeFootballData",
-    href: "https://collegefootballdata.com",
-    covers: "college football",
-  },
-  { name: "ESPN", href: "https://www.espn.com", covers: "American football scores" },
+  { name: "ESPN", href: "https://www.espn.com", covers: "NFL scores" },
 ];
 
 /**
  * Says where the data comes from and what this is.
  *
- * Two of these sources ask for attribution by name, and the rest are worth
+ * football-data.org asks for attribution by name, and the rest are worth
  * naming anyway: a page of predictions with no provenance invites the reader to
  * treat them as authoritative.
  */

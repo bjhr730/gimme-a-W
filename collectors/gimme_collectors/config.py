@@ -28,7 +28,6 @@ class Settings:
     cache_dir: Path
     user_agent: str
     cache_ttl_seconds: int
-    cfbd_api_key: str | None
     football_data_api_key: str | None
     odds_api_key: str | None
 
@@ -41,7 +40,6 @@ def settings() -> Settings:
         cache_dir=Path(os.getenv("COLLECTOR_CACHE_DIR", "./data/raw")).expanduser(),
         user_agent=os.getenv("COLLECTOR_USER_AGENT", DEFAULT_USER_AGENT),
         cache_ttl_seconds=int(os.getenv("COLLECTOR_CACHE_TTL", "600")),
-        cfbd_api_key=os.getenv("CFBD_API_KEY") or None,
         football_data_api_key=os.getenv("FOOTBALL_DATA_API_KEY") or None,
         odds_api_key=os.getenv("ODDS_API_KEY") or None,
     )
