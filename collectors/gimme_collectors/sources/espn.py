@@ -118,6 +118,7 @@ LEAGUES: dict[str, League] = {
             teams_params={"groups": "80", "limit": "400"},
             standings_params={"group": "80"},
             uid_prefix="s:20~l:23",
+            active=False,
         ),
         _soccer("eng.1", "English Premier League", "England", active=False),
         _soccer("eng.2", "English Championship", "England", active=False),

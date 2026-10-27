@@ -7,7 +7,6 @@ const LINKS = [
   { href: "/", label: "Today", glyph: "◉" },
   { href: "/soccer", label: "Soccer", glyph: "⚽" },
   { href: "/nfl", label: "NFL", glyph: "🏈" },
-  { href: "/cfb", label: "CFB", glyph: "🎓" },
   { href: "/parlay", label: "Parlay", glyph: "🎟" },
   { href: "/models", label: "Models", glyph: "◔" },
 ];

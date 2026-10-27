@@ -73,7 +73,6 @@ const LEAGUE_ALIASES: [RegExp, string][] = [
   [/\b(libertadores)\b/, "conmebol.libertadores"],
   [/\b(world cup)\b/, "fifa.world"],
   [/\b(nfl)\b/, "nfl"],
-  [/\b(college football|ncaa|ncaaf|cfb)\b/, "college-football"],
 ];
 
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -334,7 +333,7 @@ export async function runSearch(rawQuery: string): Promise<SearchResult> {
     const rows = await gameSelect().where(and(...filters)).orderBy(asc(game.kickoff)).limit(14);
     games = rows.map(toSearchGame);
     interpretation = `${leagues.length ? leagues.map((l) => l.name).join(", ") : "All games"} ${date.label}`;
-    pages.unshift({ href: `${leagues.length === 1 && leagues[0].slug === "nfl" ? "/nfl" : leagues.length === 1 && leagues[0].slug === "college-football" ? "/cfb" : leagues.length && leagues[0].sportId === "soccer" ? "/soccer" : "/"}?date=${date.day}`, label: `All games ${date.label}`, hint: date.day });
+    pages.unshift({ href: `${leagues.length === 1 && leagues[0].slug === "nfl" ? "/nfl" : leagues.length && leagues[0].sportId === "soccer" ? "/soccer" : "/"}?date=${date.day}`, label: `All games ${date.label}`, hint: date.day });
   } else if (leagues.length && !wantsTable) {
     const rows = await gameSelect()
       .where(and(inArray(competition.slug, leagues.map((l) => l.slug)), gte(game.kickoff, new Date(now.getTime() - 86_400_000 * 2))))

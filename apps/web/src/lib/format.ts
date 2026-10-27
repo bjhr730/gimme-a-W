@@ -1,4 +1,4 @@
-export type SportKey = "soccer" | "nfl" | "cfb";
+export type SportKey = "soccer" | "nfl";
 
 export const SPORTS: Record<
   SportKey,
@@ -6,17 +6,10 @@ export const SPORTS: Record<
 > = {
   soccer: { label: "Soccer", short: "Soccer", sportId: "soccer" },
   nfl: { label: "NFL", short: "NFL", sportId: "american_football", competition: "nfl" },
-  cfb: {
-    label: "College Football",
-    short: "CFB",
-    sportId: "american_football",
-    competition: "college-football",
-  },
 };
 
 export function sportKeyForCompetition(slug: string, sportId: string): SportKey {
   if (slug === "nfl") return "nfl";
-  if (slug === "college-football") return "cfb";
   return sportId === "soccer" ? "soccer" : "nfl";
 }
 

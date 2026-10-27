@@ -8,7 +8,6 @@ const ROOTS = new Set([
   "/",
   "/soccer",
   "/nfl",
-  "/cfb",
   "/parlay",
   "/models",
   "/status",

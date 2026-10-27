@@ -34,7 +34,7 @@ type Scorecard = {
 
 export default async function ModelsPage() {
   const [runs, scorecard] = await Promise.all([modelRuns(), latestScorecard()]);
-  const order = ["nfl", "college-football"];
+  const order = ["nfl"];
   const rank = (r: (typeof runs)[number]) => {
     const slug = (r.metrics as Metrics).competition ?? r.notes ?? "";
     const i = order.indexOf(slug);
