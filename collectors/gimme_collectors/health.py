@@ -2,7 +2,7 @@
 so the GitHub Actions run fails and the repository owner gets the failure email.
 
 Checks
-  1. no collector run failed in the last 24 hours
+  1. no collector run failed, or died without finishing, in the last 24 hours
   2. games were written or updated in the last 36 hours
   3. predictions were written in the last 36 hours, when there are games ahead
   4. every competition with a game in the next 7 days has a prediction for it
@@ -15,6 +15,10 @@ from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
+
+# Longer than the 60-minute job timeout, so a run that is genuinely still going
+# when the check looks is never called dead. Past this, the process is gone.
+STUCK_AFTER = timedelta(minutes=90)
 
 
 def check(database_url: str) -> tuple[list[str], list[str]]:
@@ -39,6 +43,18 @@ def check(database_url: str) -> tuple[list[str], list[str]]:
             (now - timedelta(hours=24),),
         )
         for r in cur.fetchall():
+            # A run still marked 'running' long after it started did not work --
+            # it was killed before the finally block could close it, which is
+            # what the 60-minute job timeout does. Treating anything that is not
+            # 'failed' as a success hid exactly that: three fdcouk runs died this
+            # way and the check called the pipeline healthy every time.
+            if r["status"] == "running" and r["started_at"] < now - STUCK_AFTER:
+                problems.append(
+                    f"collector run never finished: {r['slug']}/{r['adapter']} started "
+                    f"{r['started_at']:%Y-%m-%d %H:%M} UTC and is still marked running "
+                    f"-- it was probably killed by the job timeout"
+                )
+                continue
             if r["status"] != "failed":
                 continue  # its latest attempt worked, whatever happened before
             first_line = (r["error"] or "").strip().splitlines()[:1]
