@@ -42,9 +42,17 @@ jobs:
       # The current season is collected daily now, alongside the cross-check.
       # What is left for the weekly pass is the archive: seasons that have ended
       # do not change, but a re-read repairs anything a failed run left behind.
+      #
+      # Two seasons, not four. The nightly models read 365 days (data.HISTORY_DAYS),
+      # which reaches back into the previous season and no further, so 2023-24 and
+      # 2024-25 were re-read every week for nothing. Four seasons across twelve
+      # divisions was 28,864 rows and the run that wrote them had minutes to spare
+      # on a good day and hours too few on a bad one -- which is how it kept
+      # getting killed at the 60-minute cap. A back-test still wants the whole
+      # archive; it asks for it explicitly with --seasons 2023-2026.
       - name: Recent soccer seasons from football-data.co.uk (shots, corners, closing odds)
         if: always()
-        run: uv run gimme-collect run fdcouk --league all --seasons 2023-2026
+        run: uv run gimme-collect run fdcouk --league all --seasons 2025-2026
       - name: Recompute team form and Elo ratings
         if: always()
         run: uv run gimme-collect derive --what form,elo

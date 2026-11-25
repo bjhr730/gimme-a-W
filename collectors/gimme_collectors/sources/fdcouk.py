@@ -9,8 +9,8 @@ One CSV per league-season. Columns (the ones we use):
     B365>2.5, B365<2.5, B365C>2.5, B365C<2.5
 
 Team names are the site's short forms ("Man United", "Nott'm Forest"). The writer
-matches them to ESPN teams by normalized name within the competition; see
-`teamnames.py`. Unmatched names are reported, never guessed.
+matches them by normalized name within the competition; see `teamnames.py`.
+Unmatched names are reported, never guessed.
 """
 
 from __future__ import annotations
@@ -36,7 +36,14 @@ BASE_URL = "https://www.football-data.co.uk"
 RATE_LIMIT_PER_MIN = 20
 UK = ZoneInfo("Europe/London")
 
-# our competition slug -> football-data division code
+# our competition slug -> football-data division code.
+#
+# Only the leagues the app still keeps. This source also publishes Scotland,
+# Belgium, Turkey and Greece, and listing them here was costing a third of every
+# run for nothing: the competitions were retired, so each pass re-created them,
+# the purge step deleted them again, and the churn eventually turned into the
+# foreign-key failures on bel.1. Adding one back means adding it to the app
+# first -- football_data.COMPETITIONS is what decides that.
 DIVISIONS: dict[str, str] = {
     "eng.1": "E0",
     "eng.2": "E1",
@@ -46,10 +53,6 @@ DIVISIONS: dict[str, str] = {
     "fra.1": "F1",
     "ned.1": "N1",
     "por.1": "P1",
-    "sco.1": "SC0",
-    "bel.1": "B1",
-    "tur.1": "T1",
-    "gre.1": "G1",
 }
 
 

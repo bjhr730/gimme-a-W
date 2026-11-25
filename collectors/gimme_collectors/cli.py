@@ -413,7 +413,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_crosscheck(args: argparse.Namespace) -> int:
-    """An independent witness to the scoreline for the twelve leagues it covers."""
+    """An independent witness to the scoreline for the eight leagues it covers."""
     import psycopg
 
     from gimme_collectors import crosscheck
