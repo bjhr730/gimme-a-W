@@ -5,6 +5,9 @@ import { useState } from "react";
 import type { ParlayLeg } from "@/lib/queries";
 import { LocalTime } from "./local-time";
 
+/** Mirrors PARLAY_MAX_LEGS; the query already caps, this bounds the control. */
+const MAX_LEGS = 20;
+
 function teamLabel(name: string, short: string | null): string {
   return short ?? name;
 }
@@ -67,14 +70,12 @@ function americanFromProbability(p: number): string {
 }
 
 export function ParlayBuilder({ legs, day }: { legs: ParlayLeg[]; day: string }) {
-  const max = Math.min(20, legs.length);
-  const [count, setCount] = useState(Math.min(4, max));
-  // The legs are ordered so that any prefix is both likely and varied; within the
-  // slice actually shown, the likeliest reads first.
-  const chosen = legs
-    .slice(0, count)
-    .slice()
-    .sort((a, b) => b.probability - a.probability);
+  const max = Math.min(MAX_LEGS, legs.length);
+  // Opens on the whole ticket. The legs arrive in probability order, so the
+  // slider only ever trims from the bottom -- dialling it down to 4 leaves the
+  // four likeliest calls, not the first four the query happened to return.
+  const [count, setCount] = useState(max);
+  const chosen = legs.slice(0, count);
   const combined = chosen.reduce((acc, l) => acc * l.probability, 1);
   const decimal = combined > 0 ? 1 / combined : 0;
   const dayLabel = new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
@@ -178,14 +179,15 @@ export function ParlayBuilder({ legs, day }: { legs: ParlayLeg[]; day: string })
       </section>
 
       <p className="mt-3 max-w-[70ch] text-xs text-muted">
-        One leg per game, because two calls on the same match rise and fall together and
-        multiplying them would flatter the parlay. Markets are mixed rather than ranked on
-        probability alone: legs drawn from one market share a model, so if that model runs
-        hot they miss together and the real chance is lower than the product suggests. A
-        game contributes whichever of its calls the ticket needs. Legs above 95% are left
-        out, since they add nothing and no book prices them. The fair price carries no
-        bookmaker margin, so a real ticket will pay less. These are model probabilities,
-        not betting advice.
+        Up to {MAX_LEGS} legs, ranked by nothing but how likely each one is, so trimming the
+        slider always leaves the likeliest calls. One leg per game, because two calls on the
+        same match rise and fall together and multiplying them would flatter the parlay —
+        which is also why a short slate makes a short ticket. Calls under 60% are left out
+        as too close to a coin flip, and ones above 95% because they add nothing and no book
+        prices them. Two caveats on the headline number: legs drawn from the same market
+        share a model, so if it runs hot they miss together and the true chance is below the
+        product shown; and the fair price carries no bookmaker margin, so a real ticket pays
+        less. These are model probabilities, not betting advice.
       </p>
     </>
   );

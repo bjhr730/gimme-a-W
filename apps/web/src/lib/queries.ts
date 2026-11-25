@@ -503,67 +503,28 @@ export type ParlayLeg = {
 // A leg the model puts above this is not a real market: it adds nothing to a
 // parlay and says more about model confidence than about the game.
 const PARLAY_CEILING = 0.95;
-// How many of a game's best calls to consider. Only one is ever used, but having
-// alternatives lets a game contribute a different market when its best one is
-// already well represented, rather than dropping the game from the ticket.
-const CANDIDATES_PER_GAME = 5;
-// No family may hold more than this share of the legs chosen so far. Ranking on
-// probability alone put team shots on target in every one of the top slots.
-const MAX_FAMILY_SHARE = 0.5;
-
-/** Markets that move together and read as "the same kind of bet" on a ticket. */
-const MARKET_FAMILY: Record<string, string> = {
-  match_result: "result",
-  win_probability: "result",
-  total_goals: "goals",
-  btts: "goals",
-  corners: "corners",
-  match_corners: "corners",
-  shots_on_target: "shots",
-  player_shots_on_target: "shots",
-  anytime_scorer: "scorer",
-  anytime_td: "scorer",
-  anytime_assist: "assist",
-};
-
-function family(market: string): string {
-  return MARKET_FAMILY[market] ?? market;
-}
+// And one below this is not "most likely to happen" -- it is close to a coin
+// flip. A 57% leg costs the ticket nearly half its chance and tells you almost
+// nothing, so the parlay runs short rather than padding itself with one.
+const PARLAY_FLOOR = 0.6;
+// The ticket stops here however long the slate is. Twenty legs at these prices
+// already lands about once in a thousand tickets; more is theatre.
+export const PARLAY_MAX_LEGS = 20;
 
 /**
- * Order the legs so any prefix is both likely and varied.
- *
- * Walks down the candidates by probability, taking the best one whose game is
- * unused and whose market family still has room. When nothing fits the family
- * limit, the most probable remaining leg wins, so a thin slate still fills up.
- */
-function mixMarkets(candidates: ParlayLeg[], limit: number): ParlayLeg[] {
-  const chosen: ParlayLeg[] = [];
-  const usedGames = new Set<number>();
-  const counts = new Map<string, number>();
-  while (chosen.length < limit) {
-    const cap = Math.max(1, Math.floor((chosen.length + 1) * MAX_FAMILY_SHARE));
-    const withinCap = candidates.find(
-      (c) => !usedGames.has(c.gameId) && (counts.get(family(c.market)) ?? 0) + 1 <= cap,
-    );
-    const pick = withinCap ?? candidates.find((c) => !usedGames.has(c.gameId));
-    if (!pick) break;
-    chosen.push(pick);
-    usedGames.add(pick.gameId);
-    counts.set(family(pick.market), (counts.get(family(pick.market)) ?? 0) + 1);
-  }
-  return chosen;
-}
-
-/**
- * One call from each of the day's games, likeliest first and mixed by market.
+ * The day's likeliest calls, one per game, best first.
  *
  * One leg per game on purpose: two legs from the same match move together, so
- * multiplying them would overstate the parlay's chance of landing. Which of a
- * game's calls gets used depends on what the ticket already holds, so the top of
- * the list is not all the same market.
+ * multiplying them would overstate the parlay's chance of landing. That is also
+ * what bounds the ticket -- a fourteen-game Wednesday cannot make twenty legs,
+ * which is why the page offers "up to" twenty and not always twenty.
+ *
+ * Within that, the order is plain probability, so leg N is the Nth most likely
+ * thing on the slate and any prefix of the list is the N likeliest calls. The
+ * floor is applied before a game's best leg is picked, so a game whose strongest
+ * call is a coin flip drops out entirely instead of contributing something worse.
  */
-export async function parlayLegs(day: string, limit = 20): Promise<ParlayLeg[]> {
+export async function parlayLegs(day: string, limit = PARLAY_MAX_LEGS): Promise<ParlayLeg[]> {
   const rows = await db().execute(sql`
     with latest_runs as (
       select distinct on (model_name, coalesce(notes, '')) id
@@ -590,12 +551,14 @@ export async function parlayLegs(day: string, limit = 20): Promise<ParlayLeg[]> 
       left join team st on p.subject_type = 'team' and st.id = p.subject_id
       where p.probability is not null
         and p.probability <= ${PARLAY_CEILING}
+        and p.probability >= ${PARLAY_FLOOR}
         and g.status = 'scheduled'
         and g.kickoff > now()
         and to_char(g.kickoff at time zone ${SPORTS_TZ}, 'YYYY-MM-DD') = ${day}
     )
-    select * from legs where rank_in_game <= ${CANDIDATES_PER_GAME}
+    select * from legs where rank_in_game = 1
     order by probability desc
+    limit ${limit}
   `);
   const candidates: ParlayLeg[] = (rows as unknown as Record<string, unknown>[]).map((r) => ({
     gameId: Number(r.game_id),
@@ -617,7 +580,7 @@ export async function parlayLegs(day: string, limit = 20): Promise<ParlayLeg[]> 
     subjectTeamName: (r.subject_team_name as string) ?? null,
     subjectTeamShort: (r.subject_team_short as string) ?? null,
   }));
-  return mixMarkets(candidates, limit);
+  return candidates;
 }
 
 /**
@@ -626,7 +589,7 @@ export async function parlayLegs(day: string, limit = 20): Promise<ParlayLeg[]> 
  */
 export async function parlayForToday(
   startDay: string,
-  limit = 20,
+  limit = PARLAY_MAX_LEGS,
 ): Promise<{ day: string; legs: ParlayLeg[] }> {
   let day = startDay;
   for (let i = 0; i < 4; i += 1) {
@@ -655,11 +618,38 @@ export type InjuryRow = {
   returnDate: string | null;
   comment: string | null;
   reportedAt: Date | null;
+  updatedAt: Date | null;
 };
 
 // Worst news first: a player who is out matters more than one who is a doubt.
-const injurySeverity = sql`case ${playerStatus.availability}
-  when 'out' then 0 when 'doubtful' then 1 when 'questionable' then 2 else 3 end`;
+// Sorted in TypeScript rather than SQL because the rows have to be deduplicated
+// by player before they can be ordered for display.
+const SEVERITY: Record<InjuryRow["availability"], number> = {
+  out: 0,
+  doubtful: 1,
+  questionable: 2,
+  available: 3,
+};
+
+/**
+ * One row per player, keeping whichever source wrote most recently.
+ *
+ * The unique key on player_status is (player, source), so a player two sources
+ * both report appears twice -- and a source that stops collecting leaves its last
+ * word behind for ever. Freshest write wins, which needs no hard-coded list of
+ * which sources are live: the collector that still runs is the one that updated
+ * today. reported_at cannot do this job, because not every source sets it.
+ */
+function freshestPerPlayer(rows: InjuryRow[]): InjuryRow[] {
+  const best = new Map<number, InjuryRow>();
+  for (const r of rows) {
+    const held = best.get(r.playerId);
+    if (!held || (r.updatedAt?.getTime() ?? 0) > (held.updatedAt?.getTime() ?? 0)) {
+      best.set(r.playerId, r);
+    }
+  }
+  return [...best.values()];
+}
 
 const injuryCols = {
   playerId: playerStatus.playerId,
@@ -675,12 +665,13 @@ const injuryCols = {
   returnDate: sql<string | null>`${playerStatus.returnDate}::text`,
   comment: playerStatus.comment,
   reportedAt: playerStatus.reportedAt,
+  updatedAt: playerStatus.updatedAt,
 };
 
-/** Everyone on either team who is carrying a report, worst news first. */
+/** Everyone on either team who is carrying a report, once each, worst news first. */
 export async function gameInjuries(teamIds: number[]): Promise<InjuryRow[]> {
   if (teamIds.length === 0) return [];
-  const rows = await db()
+  const rows = (await db()
     .select(injuryCols)
     .from(playerStatus)
     .innerJoin(player, eq(playerStatus.playerId, player.id))
@@ -689,9 +680,12 @@ export async function gameInjuries(teamIds: number[]): Promise<InjuryRow[]> {
         inArray(playerStatus.teamId, teamIds),
         sql`${playerStatus.availability} <> 'available'`,
       ),
-    )
-    .orderBy(injurySeverity, asc(player.fullName));
-  return rows as InjuryRow[];
+    )) as InjuryRow[];
+  return freshestPerPlayer(rows).sort(
+    (a, b) =>
+      SEVERITY[a.availability] - SEVERITY[b.availability] ||
+      a.playerName.localeCompare(b.playerName),
+  );
 }
 
 /** The report for one team, for the team page. */
@@ -699,14 +693,14 @@ export async function teamInjuries(teamId: number): Promise<InjuryRow[]> {
   return gameInjuries([teamId]);
 }
 
-/** The report for one player, for the player page. */
+/** The report for one player, for the player page: the newest one written. */
 export async function playerInjury(playerId: number): Promise<InjuryRow | null> {
   const rows = await db()
     .select(injuryCols)
     .from(playerStatus)
     .innerJoin(player, eq(playerStatus.playerId, player.id))
     .where(eq(playerStatus.playerId, playerId))
-    .orderBy(injurySeverity)
+    .orderBy(desc(playerStatus.updatedAt))
     .limit(1);
   return (rows[0] as InjuryRow) ?? null;
 }
@@ -717,13 +711,12 @@ export async function statusesForPlayers(
 ): Promise<Map<number, InjuryRow>> {
   const out = new Map<number, InjuryRow>();
   if (playerIds.length === 0) return out;
-  const rows = await db()
+  const rows = (await db()
     .select(injuryCols)
     .from(playerStatus)
     .innerJoin(player, eq(playerStatus.playerId, player.id))
-    .where(inArray(playerStatus.playerId, playerIds))
-    .orderBy(injurySeverity);
-  for (const r of rows as InjuryRow[]) if (!out.has(r.playerId)) out.set(r.playerId, r);
+    .where(inArray(playerStatus.playerId, playerIds))) as InjuryRow[];
+  for (const r of freshestPerPlayer(rows)) out.set(r.playerId, r);
   return out;
 }
 
