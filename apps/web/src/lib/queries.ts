@@ -876,24 +876,44 @@ export async function winProbabilities(gameIds: number[]) {
   return out;
 }
 
+const MODEL_RUN_COLS = {
+  id: modelRun.id,
+  modelName: modelRun.modelName,
+  modelVersion: modelRun.modelVersion,
+  sportId: modelRun.sportId,
+  startedAt: modelRun.startedAt,
+  status: modelRun.status,
+  snapshotCount: modelRun.snapshotCount,
+  metrics: modelRun.metrics,
+  notes: modelRun.notes,
+};
+
+// A back-test is a run that records the seasons it walked; a nightly prediction
+// run does not. They have to be fetched separately: the nightly pass writes
+// about twenty rows a day, so one shared "latest 200" window reaches back barely
+// a week and the back-tests -- which only run weekly -- fall out of it and the
+// page then claims there are none. There were sixty-seven in the table when it
+// said that.
+const IS_BACKTEST = sql`${modelRun.metrics}->>'seasons' is not null`;
+const IS_NOT_BACKTEST = sql`${modelRun.metrics}->>'seasons' is null`;
+
 /** Latest finished model runs (one per model + competition) with their metrics. */
 export async function modelRuns() {
-  const rows = await db()
-    .select({
-      id: modelRun.id,
-      modelName: modelRun.modelName,
-      modelVersion: modelRun.modelVersion,
-      sportId: modelRun.sportId,
-      startedAt: modelRun.startedAt,
-      status: modelRun.status,
-      snapshotCount: modelRun.snapshotCount,
-      metrics: modelRun.metrics,
-      notes: modelRun.notes,
-    })
-    .from(modelRun)
-    .where(eq(modelRun.status, "succeeded"))
-    .orderBy(desc(modelRun.id))
-    .limit(200);
+  const [recent, backtests] = await Promise.all([
+    db()
+      .select(MODEL_RUN_COLS)
+      .from(modelRun)
+      .where(and(eq(modelRun.status, "succeeded"), IS_NOT_BACKTEST))
+      .orderBy(desc(modelRun.id))
+      .limit(200),
+    db()
+      .select(MODEL_RUN_COLS)
+      .from(modelRun)
+      .where(and(eq(modelRun.status, "succeeded"), IS_BACKTEST))
+      .orderBy(desc(modelRun.id))
+      .limit(60),
+  ]);
+  const rows = [...recent, ...backtests];
   const seen = new Set<string>();
   return rows.filter((r) => {
     const m = (r.metrics ?? {}) as { competition?: string; seasons?: unknown };
